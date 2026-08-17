@@ -1,0 +1,37 @@
+[package]
+name = "@mplx/clispinner"
+version = "0.1.0"
+description = "a terminal spinner that animates on its own goroutine"
+license = "MIT"
+authors = ["mplx <developer@mplx.eu>"]
+keywords = ["spinner", "terminal", "cli", "progress"]
+
+# A deck, not an app: a scoped name and no `bin`. It is imported and vendored
+# into a consuming project, never run on its own. `demo.j` at the root is a
+# hand-run tour, and is deliberately outside `src/` so it is never vendored.
+
+# Project URLs by role. `deck` (the deck's own manifest location) is mandatory;
+# `homepage` and `manual` are optional.
+[package.urls]
+deck = "https://raw.githubusercontent.com/mplx/deck-clispinner/main/deck.toml"
+homepage = "https://github.com/mplx/deck-clispinner"
+
+# Jennifer engines that can run this deck.
+#
+# A floor, not a caret: the deck needs `time.fromMilliseconds`, `spawn` with
+# cooperative cancellation, and `channel.len` for the non-blocking command poll,
+# and the language is pre-1.0. jennifer-tiny is not excluded: the deck touches
+# no capability a tiny build lacks. It stubs `term`, but the width lookup is
+# guarded and falls back to 80 columns, and `os.isTerminal` reports false there
+# anyway, which the spinner already treats as "draw nothing".
+[engines]
+jennifer = ">=0.25.0"
+
+# Runtime requirements: deck = version constraint. Registry decks only, and they
+# MUST be scoped. This deck uses nothing but bundled stdlib modules (io, os,
+# time, task, channel, convert, strings, lists, maps), so it has none.
+[decks]
+
+# What this deck provides: capability = concrete version.
+[provides]
+spinner = "0.1.0"
