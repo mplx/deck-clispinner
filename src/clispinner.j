@@ -1,24 +1,16 @@
 # SPDX-License-Identifier: MIT
-# Copyright (C) 2026 mplx <developer@mplx.eu>
+# Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
+# pragma-jennifer-version: >=0.25.0
 
 /**
- * A terminal spinner that animates on its own goroutine.
+ * A terminal spinner that animates in its own `spawn`ed task.
  *
- * `startSpinner` hands back a handle and returns immediately; the animation
- * runs in a `spawn`ed task while the caller gets on with the slow work that
- * needed a spinner in the first place. Everything after that is a message:
- * `updateSpinner` changes the animation, `statusSpinner` changes the text beside
- * it, `removeSpinner` erases the line and stops the task.
+ * `startSpinner` returns a handle immediately. The other verbs send commands
+ * over the handle's channel: `spawn` deep-copies its scope at launch, so the
+ * channel is the only state the caller and the task share.
  *
- * **Why messages and not shared state.** `spawn` deep-copies its enclosing scope
- * at launch, so the task cannot see a later write to a variable the caller
- * holds. A channel is the one handle that stays shared, so it is the only way
- * to talk to a running spinner. That is also why every verb here takes the
- * `Spinner` handle: it carries the channel.
- *
- * **Off a terminal it renders nothing.** Piped or redirected output stays clean,
- * which matters because a spinner writes control characters, not text. The task
- * still runs and still accepts commands, so calling code needs no branch.
+ * Off a terminal nothing is drawn, but the task still runs and accepts
+ * commands, so calling code needs no branch.
  * @module clispinner
  * @example
  * import "./clispinner.j" as clispinner;
@@ -47,20 +39,20 @@ def const CMD_STATUS as string init "status";
 /** Replace the animation, its speed, or both. */
 def const CMD_UPDATE as string init "update";
 
-/** How many commands may be queued before a sender blocks. */
+/** Commands that may be queued before a sender blocks. */
 def const QUEUE as int init 32;
 
-/** The stream name for standard output. */
+/** Stream name for standard output. */
 export def const STDOUT as string init "stdout";
-/** The stream name for standard error, the usual place for progress output. */
+/** Stream name for standard error, the default. */
 export def const STDERR as string init "stderr";
 
 /**
- * How a spinner should look and behave.
- * @field name {string} a catalogue name from `frames.j`; unknown falls back
- * @field speed {int} the frame interval in milliseconds, or 0 for the spinner's own
- * @field label {string} the text shown to the right of the spinner
- * @field stream {string} `STDOUT` or `STDERR`
+ * How a spinner looks and where it writes. Build one with `options`.
+ * @field name {string} catalogue name; unknown or "" falls back to `dots`
+ * @field speed {int} frame interval in ms; 0 or less uses the animation's own
+ * @field label {string} initial status text
+ * @field stream {string} `STDOUT` or `STDERR`; anything else means `STDERR`
  */
 export def struct Options {
     name as string,
@@ -70,11 +62,10 @@ export def struct Options {
 };
 
 /**
- * A handle to a running spinner. Carries the command channel, which is the only
- * shared thing between the caller and the animating task.
- * @field commands {channel of Command} the command queue the task reads
- * @field worker {task of int} the animating task, yielding the frame count
- * @field options {Options} the options the spinner was started with
+ * Handle to a running spinner.
+ * @field commands {channel of Command} command queue the task reads
+ * @field worker {task of int} animating task; yields the frame count
+ * @field options {Options} resolved options last sent to the task
  */
 export def struct Spinner {
     commands as channel of Command,
@@ -84,9 +75,9 @@ export def struct Spinner {
 
 /**
  * One instruction to a running spinner.
- * @field kind {string} `CMD_STOP`, `CMD_STATUS`, or `CMD_UPDATE`
- * @field text {string} the new status text, for `CMD_STATUS`
- * @field options {Options} the new options, for `CMD_UPDATE`
+ * @field kind {string} "stop", "status" or "update"; other kinds are ignored
+ * @field text {string} new status text, for "status"
+ * @field options {Options} new options, for "update"
  */
 export def struct Command {
     kind as string,
@@ -94,38 +85,33 @@ export def struct Command {
     options as Options
 };
 
-# esc is the escape character. It is built from its code point rather than
-# written as a literal, because an escape byte in source is invisible in a diff
-# and does not survive every editor.
+# esc is the escape character, built from its code point because an escape byte
+# in source is invisible in a diff.
 func esc() {
     return convert.fromCodepoint(27);
 }
 
-/** The terminal width assumed when the real one cannot be read. */
+/** Terminal width assumed when the real one cannot be read. */
 export def const FALLBACK_COLS as int init 80;
 
-/** The terminal height assumed when the real one cannot be read. */
+/** Terminal height assumed when the real one cannot be read. */
 export def const FALLBACK_ROWS as int init 24;
 
 /**
- * The control sequence that erases the current line and returns the cursor to
- * its start, which is what makes the next frame overwrite the last one.
- * @return {string} carriage return followed by the erase-line sequence
+ * Control sequence that erases the current line and moves the cursor to its
+ * start.
+ * @return {string} `\r` then `ESC[2K`
  */
 export func eraseLine() {
     return "\r" + esc() + "[2K";
 }
 
 /**
- * The control sequence that erases the last `rows` lines and leaves the cursor
- * at the start of the topmost one, ready for the block to be redrawn.
- *
- * A one-row block is just `eraseLine`. More than that needs the cursor walked
- * back up, because erase-line only ever erases the line the cursor is on: a
- * block redrawn without this leaves every row but the last on screen, which is
- * the debris a wrapped or multi-row spinner otherwise trails behind it.
- * @param rows {int} how many lines the last block occupied; below 1 counts as 1
- * @return {string} the erase sequence
+ * Control sequence that erases the last `rows` lines and leaves the cursor at
+ * the start of the topmost one. For one row it equals `eraseLine()`; each
+ * further row adds a cursor-up (`ESC[A`) and another erase.
+ * @param rows {int} lines the last block occupied; below 1 counts as 1
+ * @return {string} erase sequence
  */
 export func eraseBlock(rows as int) {
     def out as string init eraseLine();
@@ -138,23 +124,20 @@ export func eraseBlock(rows as int) {
 }
 
 /**
- * Split a frame into its rows. Every animation in the catalogue today is one
- * row, but the format allows more and the renderer handles it.
- * @param frame {string} the frame text
- * @return {list of string} the frame's lines, in order
+ * Split a frame on `\n`.
+ * @param frame {string} frame text
+ * @return {list of string} lines, in order; one for a single-row frame
  */
 export func frameRows(frame as string) {
     return strings.split($frame, "\n");
 }
 
 /**
- * The terminal's width in columns, or `FALLBACK_COLS` when it cannot be read.
- *
- * A width of zero comes back from a pseudo-terminal nobody sized, and a stubbed
- * `term` throws; both mean "no idea", and guessing 80 is better than laying out
- * against zero columns.
+ * Terminal width in columns. Returns `FALLBACK_COLS` (80) when `term.size`
+ * throws (not a terminal, stubbed `term`) or reports zero (an unsized
+ * pseudo-terminal).
  * @param stream {string} `STDOUT` or `STDERR`
- * @return {int} the width in columns, always at least 1
+ * @return {int} columns, at least 1
  */
 export func terminalWidth(stream as string) {
     def cols as int init 0;
@@ -170,9 +153,9 @@ export func terminalWidth(stream as string) {
 }
 
 /**
- * The terminal's height in rows, or `FALLBACK_ROWS` when it cannot be read.
+ * Terminal height in rows, or `FALLBACK_ROWS` (24) when it cannot be read.
  * @param stream {string} `STDOUT` or `STDERR`
- * @return {int} the height in rows, always at least 1
+ * @return {int} rows, at least 1
  */
 export func terminalHeight(stream as string) {
     def rows as int init 0;
@@ -188,16 +171,12 @@ export func terminalHeight(stream as string) {
 }
 
 /**
- * How many rows a spinner may actually draw in this terminal.
- *
- * An animation taller than the window is the one case the erase cannot undo.
- * Drawing it scrolls the terminal, and once a row has scrolled off the top,
- * moving the cursor up stops at the first line instead of reaching it: the
- * erase then undoes the wrong rows and the block is left on screen. A row is
- * held back for the cursor, so the block never touches the bottom line either.
+ * Rows a spinner may draw: `wanted`, capped at the terminal height minus one.
+ * A taller block would scroll the terminal, and the cursor-up erase cannot
+ * reach rows that scrolled off the top.
  * @param stream {string} `STDOUT` or `STDERR`
- * @param wanted {int} the animation's own height
- * @return {int} the height to draw, at least 1 and never taller than the window
+ * @param wanted {int} animation height
+ * @return {int} rows to draw, at least 1
  */
 export func visibleRows(stream as string, wanted as int) {
     def room as int init terminalHeight($stream) - 1;
@@ -214,13 +193,10 @@ export func visibleRows(stream as string, wanted as int) {
 }
 
 /**
- * Keep at most `maxRows` rows of a frame, for an animation taller than the
- * terminal. The animation is clipped rather than scaled, because a spinner is
- * art: dropping rows keeps what is left recognisable, where squeezing it would
- * not.
- * @param frame {string} the frame text
- * @param maxRows {int} the most rows to keep
- * @return {string} the frame, clipped to that height
+ * Keep the first `maxRows` rows of a frame. Rows are dropped, not scaled.
+ * @param frame {string} frame text
+ * @param maxRows {int} most rows to keep; below 1 keeps the whole frame
+ * @return {string} clipped frame
  */
 export func clipFrame(frame as string, maxRows as int) {
     def rows as list of string init frameRows($frame);
@@ -237,16 +213,12 @@ export func clipFrame(frame as string, maxRows as int) {
 }
 
 /**
- * Trim status text to a column budget, marking it when something was cut.
- *
- * The budget is counted in runes, not display columns: the frame's own width is
- * known exactly (the catalogue measured it), but arbitrary status text would
- * need a character-width table the interpreter does not have. For the text a
- * status line actually carries this is the same number, and where it is not,
- * erring narrow keeps the line inside the terminal, which is the point.
- * @param status {string} the text to fit
- * @param budget {int} how many columns are left for it
- * @return {string} the text, trimmed to fit, or "" when nothing fits
+ * Trim text to `budget` runes, ending a cut text with `…` (counted in the
+ * budget). Runes, not display columns: the interpreter has no character-width
+ * table, so wide characters can still overflow.
+ * @param status {string} text to fit
+ * @param budget {int} runes available
+ * @return {string} the text, the trimmed text, or "" when `budget` is below 1
  */
 export func fitStatus(status as string, budget as int) {
     if ($budget < 1) {
@@ -262,9 +234,8 @@ export func fitStatus(status as string, budget as int) {
 }
 
 # markCut ends a line with an ellipsis to show text was dropped, giving up a
-# character to make room when the line already fills its width. It cannot defer
-# to fitStatus, which leaves an exactly-full line alone: here the line fits but
-# what followed it did not, and that is the thing being reported.
+# character when the line already fills its width. fitStatus would leave an
+# exactly-full line alone; here the line fits but what followed it did not.
 func markCut(line as string, width as int) {
     if ($width < 1) {
         return "";
@@ -276,15 +247,12 @@ func markCut(line as string, width as int) {
 }
 
 /**
- * Break text into chunks of at most `width` runes, cutting mid-word rather than
- * looking for spaces.
- *
- * A status line is a fixed box beside a spinner, not prose: a word-aware wrap
- * would leave ragged gaps in a two or three row box and can fail outright on a
- * single word longer than the box. A hard cut always fills the space it has.
- * @param text {string} the text to break up
- * @param width {int} the maximum runes per chunk
- * @return {list of string} the chunks; a single empty chunk for empty text
+ * Break text into chunks of at most `width` runes, cutting mid-word. A status
+ * box is a fixed shape: a word-aware wrap leaves ragged gaps and fails on a word
+ * longer than the box.
+ * @param text {string} text to break
+ * @param width {int} most runes per chunk
+ * @return {list of string} chunks; `[""]` for empty text, `[]` when `width` < 1
  */
 export func wrapHard(text as string, width as int) {
     def out as list of string init [];
@@ -308,18 +276,13 @@ export func wrapHard(text as string, width as int) {
 }
 
 /**
- * Lay a status message out into the rows a spinner leaves beside it.
- *
- * The message gets as many rows as the animation is tall and no more. Its own
- * line breaks are honoured within that budget, so a caller can shape a two-line
- * message beside a two-row spinner, and anything past the last row is cut hard
- * with an ellipsis rather than wrapping into the terminal and scrolling the
- * animation off the screen. A one-row spinner therefore behaves exactly as
- * before: one line, truncated to fit.
- * @param status {string} the message, which may contain line breaks
- * @param rows {int} how many rows the spinner occupies, and so how many the message may
- * @param width {int} the columns available to the right of the spinner
- * @return {list of string} at most `rows` lines, each at most `width` wide
+ * Lay a status out in at most `rows` lines of at most `width` runes. Its `\n`
+ * breaks are kept, long lines are cut with `wrapHard`, and when text is left
+ * over the last line ends in `…`.
+ * @param status {string} message, may contain `\n`
+ * @param rows {int} spinner height, the most lines the message may use
+ * @param width {int} runes available to the right of the spinner
+ * @return {list of string} lines; empty for blank text or a budget below 1
  */
 export func layoutStatus(status as string, rows as int, width as int) {
     def out as list of string init [];
@@ -342,34 +305,25 @@ export func layoutStatus(status as string, rows as int, width as int) {
 }
 
 /**
- * Compose the block to draw: the frame, and the status beside its first row,
- * kept inside the terminal's width so the line never wraps.
+ * Compose a frame and its status into the block to write, exactly as tall as
+ * the frame and, unless the frame alone is wider, at most `width - 1` runes
+ * wide, so it does not wrap. The status
+ * starts beside the first row and gets `width - frameCols - 2` runes per row
+ * (one separating space, the last column left empty); see `layoutStatus`. The
+ * frame is never cut.
  *
- * Wrapping is what breaks a spinner. A line longer than the terminal spills
- * onto a second row, and the next redraw erases only the row the cursor is on,
- * so the spill stays on screen and the animation appears to scroll. The frame
- * is never cut, because a half-drawn frame is worse than a cut status.
- *
- * The status gets the rows the animation is tall, no more. Every frame in the
- * catalogue is padded to its animation's width, so the status column is fixed.
- *
- * The last column is deliberately left empty. A line written right up to the
- * edge leaves the cursor in the pending-wrap state, and terminals disagree
- * about what a newline does next: some move down one row, some wrap and then
- * move down, which silently makes the block a row taller than the erase is
- * about to undo. Giving up one column costs nothing and removes the
- * disagreement.
- * @param frame {string} the current frame
- * @param status {string} the text to put beside it, which may contain line breaks
- * @param frameCols {int} the frame's measured width, from the catalogue
- * @param width {int} the terminal width to stay inside
- * @return {string} the text to write, with "\n" between rows
+ * The last column stays empty because a line ending at the edge leaves the
+ * cursor in the pending-wrap state, and terminals disagree on what the next
+ * newline does.
+ * @param frame {string} current frame
+ * @param status {string} text beside it, may contain `\n`
+ * @param frameCols {int} measured frame width, from the catalogue
+ * @param width {int} terminal width
+ * @return {string} block to write, rows joined with "\n"
  */
-export func renderBlock(frame as string, status as string, frameCols as int,
-    width as int) {
+export func renderBlock(frame as string, status as string, frameCols as int, width as int) {
     def rows as list of string init frameRows($frame);
-    def lines as list of string init layoutStatus($status, len($rows),
-        $width - $frameCols - 2);
+    def lines as list of string init layoutStatus($status, len($rows), $width - $frameCols - 2);
     def out as list of string init [];
     def i as int init 0;
     while ($i < len($rows)) {
@@ -384,44 +338,38 @@ export func renderBlock(frame as string, status as string, frameCols as int,
 }
 
 /**
- * The control sequence that hides the cursor, so it does not blink over the
- * animation.
- * @return {string} the hide-cursor sequence
+ * Control sequence that hides the cursor.
+ * @return {string} `ESC[?25l`
  */
 export func hideCursor() {
     return esc() + "[?25l";
 }
 
 /**
- * The control sequence that shows the cursor again. Every path that hides the
- * cursor must run this, including the failure paths.
- * @return {string} the show-cursor sequence
+ * Control sequence that shows the cursor. Every path that hides it must write
+ * this, including failure paths.
+ * @return {string} `ESC[?25h`
  */
 export func showCursor() {
     return esc() + "[?25h";
 }
 
 /**
- * Build an options value with the defaults filled in, which is the intended way
- * to construct one: the struct gains fields over time, this call does not.
- * @param name {string} a catalogue name, or "" for the default spinner
- * @param label {string} the text beside the spinner
- * @return {Options} the options, ready for `startSpinner`
+ * Options with speed 0 and stream `STDERR`. Use this instead of a struct
+ * literal: the struct will gain fields, this call will not.
+ * @param name {string} catalogue name, or "" for the default
+ * @param label {string} initial status text
+ * @return {Options} options for `startSpinner` or `updateSpinner`
  */
 export func options(name as string, label as string) {
-    return Options{
-        name: $name,
-        speed: 0,
-        label: $label,
-        stream: STDERR
-    };
+    return Options{name: $name, speed: 0, label: $label, stream: STDERR};
 }
 
 /**
- * Fill in whatever an options value left unset, so the rest of the module never
- * has to ask whether a field is meaningful.
- * @param opts {Options} the options as the caller supplied them
- * @return {Options} the same options with every field resolved
+ * Normalise options: an unknown or empty name becomes `frames.DEFAULT_NAME`,
+ * any stream but `STDOUT` becomes `STDERR`, a negative speed becomes 0.
+ * @param opts {Options} options as supplied
+ * @return {Options} resolved options
  */
 export func resolveOptions(opts as Options) {
     def out as Options init $opts;
@@ -438,10 +386,9 @@ export func resolveOptions(opts as Options) {
 }
 
 /**
- * The frame interval a spinner will actually run at: the caller's speed when
- * they set one, otherwise the interval the animation was designed for.
- * @param opts {Options} the resolved options
- * @return {int} the interval in milliseconds
+ * Frame interval: `opts.speed` when positive, else the animation's own.
+ * @param opts {Options} resolved options
+ * @return {int} interval in milliseconds
  */
 export func intervalOf(opts as Options) {
     if ($opts.speed > 0) {
@@ -451,12 +398,12 @@ export func intervalOf(opts as Options) {
 }
 
 /**
- * Render one frame of the line, without the erase sequence: the frame, then the
- * status text when there is one. This is the whole of the spinner's appearance,
- * kept separate from the writing so it can be asserted on.
- * @param frame {string} the current animation frame
- * @param status {string} the text beside it ("" for none)
- * @return {string} the line to write
+ * Join a frame and its status with one space, with no width limit or erase
+ * sequence. A blank status gives the frame alone. The task draws with
+ * `renderBlock`.
+ * @param frame {string} current frame
+ * @param status {string} text beside it, "" for none
+ * @return {string} the line
  */
 export func renderLine(frame as string, status as string) {
     if (strings.trim($status) == "") {
@@ -476,26 +423,25 @@ func writeTo(stream as string, s as string) {
 }
 
 /**
- * Report whether a stream is a terminal, which decides whether a spinner draws
- * at all. Redirected output gets none of the control characters.
+ * Whether a stream is a terminal. `startSpinner` checks this once; when false
+ * the spinner writes nothing.
  * @param stream {string} `STDOUT` or `STDERR`
- * @return {bool} true when that stream is a terminal
+ * @return {bool} true for a terminal
  */
 export func drawable(stream as string) {
     return os.isTerminal($stream);
 }
 
 /**
- * Everything a running spinner knows. It lives inside the animating task and
- * moves forward only through `applyCommand` and `advance`, which keeps the task
- * body itself flat and leaves the interesting behaviour in pure functions that
- * a test can drive without a terminal.
- * @field options {Options} the options in force
- * @field spec {frames.Frames} the animation the options select
- * @field status {string} the text beside the spinner
- * @field index {int} the next frame to draw
- * @field drawn {int} how many frames have been written
- * @field rows {int} how many lines the block on screen occupies, for the erase
+ * State of the animating task. It changes only through the pure functions
+ * `applyCommand`, `drewRows` and `advance`, so tests can drive it without a
+ * terminal.
+ * @field options {Options} options in force
+ * @field spec {frames.Frames} animation the options select
+ * @field status {string} text beside the spinner
+ * @field index {int} next frame to draw, not wrapped
+ * @field drawn {int} frames written
+ * @field rows {int} lines the block on screen occupies, for the next erase
  * @field stopped {bool} whether a stop command has arrived
  */
 export def struct State {
@@ -509,9 +455,9 @@ export def struct State {
 };
 
 /**
- * The starting state for a set of options.
- * @param opts {Options} the resolved options
- * @return {State} a state ready to draw its first frame
+ * Initial state: frame 0, nothing drawn, status set to the label, `rows` 1.
+ * @param opts {Options} resolved options
+ * @return {State} initial state
  */
 export func newState(opts as Options) {
     return State{
@@ -520,23 +466,20 @@ export func newState(opts as Options) {
         status: $opts.label,
         index: 0,
         drawn: 0,
-        # One, not the animation's height: this counts the rows *on screen*, and
-        # nothing has been drawn yet. Seeding it from the animation would make a
-        # multi-row spinner's first erase walk the cursor up over whatever the
-        # program printed before the spinner started.
+        # One, not the animation's height: nothing is on screen yet, and a
+        # taller first erase would wipe what the program printed before.
         rows: 1,
         stopped: false
     };
 }
 
 /**
- * Apply one command to a state. A stop only sets the flag: the task decides
- * what to write on the way out, because only it knows whether it drew anything.
- * An update restarts the frame index, since a frame number means nothing to a
- * different animation.
- * @param st {State} the state before the command
- * @param c {Command} the command to apply
- * @return {State} the state after it
+ * Apply one command. "stop" only sets `stopped`. "status" replaces the status.
+ * "update" resolves the new options, switches the animation, sets the status to
+ * the new label and restarts at frame 0. Unknown kinds change nothing.
+ * @param st {State} state before the command
+ * @param c {Command} command to apply
+ * @return {State} state after it
  */
 export func applyCommand(st as State, c as Command) {
     def out as State init $st;
@@ -558,13 +501,12 @@ export func applyCommand(st as State, c as Command) {
 }
 
 /**
- * Record how many rows the block just written occupies, so the next redraw
- * erases exactly that many. It is tracked rather than recomputed because the
- * erase has to undo what is *on screen*, which is the previous animation's
- * height, not the one that replaced it.
- * @param st {State} the state that just drew
- * @param rows {int} the number of rows written
- * @return {State} the state with its row count updated
+ * Record the rows just written, so the next erase undoes exactly those. It is
+ * tracked, not recomputed, because after an update the screen still shows the
+ * previous animation's height.
+ * @param st {State} state that just drew
+ * @param rows {int} rows written
+ * @return {State} state with `rows` set
  */
 export func drewRows(st as State, rows as int) {
     def out as State init $st;
@@ -573,19 +515,19 @@ export func drewRows(st as State, rows as int) {
 }
 
 /**
- * The frame a state is about to draw, wrapping round the animation.
- * @param st {State} the current state
- * @return {string} the frame text
+ * Frame to draw next: `index` modulo the frame count.
+ * @param st {State} current state
+ * @return {string} frame text
  */
 export func currentFrame(st as State) {
     return $st.spec.frames[$st.index % len($st.spec.frames)];
 }
 
 /**
- * Move a state on by one frame, counting the frame as drawn.
- * @param st {State} the current state
- * @param counted {bool} whether a frame was actually written
- * @return {State} the state advanced by one
+ * Move to the next frame, incrementing `drawn` only when `counted`.
+ * @param st {State} current state
+ * @param counted {bool} whether a frame was written
+ * @return {State} advanced state
  */
 export func advance(st as State, counted as bool) {
     def out as State init $st;
@@ -597,14 +539,13 @@ export func advance(st as State, counted as bool) {
 }
 
 /**
- * Start a spinner. Returns as soon as the animating task is launched, so the
- * caller can get on with the work the spinner is covering.
+ * Launch the animating task and return at once. Whether to draw is decided
+ * here, from `drawable` on the resolved stream, and not re-checked later.
  *
- * The returned handle must reach `removeSpinner`, which is what stops the task
- * and puts the cursor back. A spinner left running holds the terminal in a
- * state the user did not ask for.
- * @param opts {Options} how the spinner should look; see `options`
- * @return {Spinner} the handle, for the other verbs in this module
+ * Pass the handle to `removeSpinner` or `finishSpinner`: until then the task
+ * runs and, on a terminal, the cursor stays hidden.
+ * @param opts {Options} see `options`
+ * @return {Spinner} handle for the other verbs
  */
 export func startSpinner(opts as Options) {
     def o as Options init resolveOptions($opts);
@@ -623,11 +564,12 @@ export func startSpinner(opts as Options) {
                 continue;
             }
             if ($draw) {
-                def fits as int init visibleRows($st.options.stream,
-                    $st.spec.rows);
+                def fits as int init visibleRows($st.options.stream, $st.spec.rows);
                 def block as string init renderBlock(
-                    clipFrame(currentFrame($st), $fits), $st.status,
-                    $st.spec.cols, terminalWidth($st.options.stream));
+                    clipFrame(currentFrame($st), $fits),
+                    $st.status,
+                    $st.spec.cols,
+                    terminalWidth($st.options.stream));
                 writeTo($st.options.stream, eraseBlock($st.rows) + $block);
                 $st = drewRows($st, len(frameRows($block)));
             }
@@ -639,74 +581,65 @@ export func startSpinner(opts as Options) {
         }
         return $st.drawn;
     };
-    return Spinner{ commands: $cmds, worker: $worker, options: $o };
+    return Spinner{commands: $cmds, worker: $worker, options: $o};
 }
 
 /**
- * Change a running spinner's animation, speed, label, or stream. The frame
- * index restarts, because a frame number means nothing to a different animation.
- * @param sp {Spinner} the running spinner
- * @param opts {Options} the new options, complete rather than partial
- * @return {Spinner} the handle with its recorded options updated
+ * Replace a running spinner's options and restart at frame 0. The status is
+ * reset to `opts.label`. A stream change does not re-check `drawable`.
+ * @param sp {Spinner} running spinner
+ * @param opts {Options} complete new options, not a partial update
+ * @return {Spinner} handle with `options` updated; use it from now on
+ * @throws {Error} kind "runtime" when the spinner was already removed
  */
 export func updateSpinner(sp as Spinner, opts as Options) {
     def o as Options init resolveOptions($opts);
-    channel.send($sp.commands, Command{
-        kind: CMD_UPDATE,
-        text: "",
-        options: $o
-    });
+    channel.send($sp.commands, Command{kind: CMD_UPDATE, text: "", options: $o});
     def out as Spinner init $sp;
     $out.options = $o;
     return $out;
 }
 
 /**
- * Set the text shown to the right of the spinner, the usual way to say what the
- * slow thing is currently doing.
- * @param sp {Spinner} the running spinner
- * @param msg {string} the new status text; "" leaves the spinner bare
- * @return {Spinner} the handle, unchanged, so calls can be chained
+ * Replace the status text.
+ * @param sp {Spinner} running spinner
+ * @param msg {string} new status; "" leaves the spinner bare
+ * @return {Spinner} the same handle
+ * @throws {Error} kind "runtime" when the spinner was already removed
  */
 export func statusSpinner(sp as Spinner, msg as string) {
-    channel.send($sp.commands, Command{
-        kind: CMD_STATUS,
-        text: $msg,
-        options: $sp.options
-    });
+    channel.send($sp.commands, Command{kind: CMD_STATUS, text: $msg, options: $sp.options});
     return $sp;
 }
 
 /**
- * Stop a spinner, erase its line, and restore the cursor. Blocks until the task
- * has actually finished, so nothing writes to the terminal after this returns
- * and the caller can print normally again.
- * @param sp {Spinner} the spinner to stop
- * @return {int} how many frames it drew, which is 0 off a terminal
+ * Stop a spinner, erase its block and show the cursor. Blocks until the task
+ * has finished, then closes the command channel, so nothing is written after it
+ * returns.
+ * @param sp {Spinner} spinner to stop
+ * @return {int} frames drawn; 0 off a terminal
+ * @throws {Error} kind "runtime" when the spinner was already removed
  */
 export func removeSpinner(sp as Spinner) {
-    channel.send($sp.commands, Command{
-        kind: CMD_STOP,
-        text: "",
-        options: $sp.options
-    });
+    channel.send($sp.commands, Command{kind: CMD_STOP, text: "", options: $sp.options});
     def drawn as int init task.wait($sp.worker);
     channel.close($sp.commands);
     return $drawn;
 }
 
 /**
- * Stop a spinner and print a final line in its place, for the common ending
- * where the work is done and the result should stay on screen.
- * @param sp {Spinner} the spinner to stop
- * @param mark {string} a leading symbol, such as a check mark ("" for none)
- * @param msg {string} the line to leave behind
- * @return {int} how many frames the spinner drew
+ * `removeSpinner`, then write `mark msg` and a newline to the spinner's stream,
+ * cut to the terminal width like a status. Writes this line even off a
+ * terminal; writes nothing when both are blank.
+ * @param sp {Spinner} spinner to stop
+ * @param mark {string} leading symbol, such as a check mark; "" for none
+ * @param msg {string} line to leave behind
+ * @return {int} frames drawn; 0 off a terminal
+ * @throws {Error} kind "runtime" when the spinner was already removed
  */
 export func finishSpinner(sp as Spinner, mark as string, msg as string) {
     def drawn as int init removeSpinner($sp);
-    def line as string init renderBlock($mark, $msg, len($mark),
-        terminalWidth($sp.options.stream));
+    def line as string init renderBlock($mark, $msg, len($mark), terminalWidth($sp.options.stream));
     if (strings.trim($line) == "") {
         return $drawn;
     }
@@ -715,9 +648,9 @@ export func finishSpinner(sp as Spinner, mark as string, msg as string) {
 }
 
 /**
- * How much room an animation needs.
- * @field cols {int} terminal columns the widest frame occupies
- * @field rows {int} lines a frame occupies
+ * Room an animation needs.
+ * @field cols {int} terminal columns every frame occupies
+ * @field rows {int} lines every frame occupies
  */
 export def struct Size {
     cols as int,
@@ -725,23 +658,19 @@ export def struct Size {
 };
 
 /**
- * The size of a named animation, for a caller laying out around the spinner:
- * reserving a column for it, or deciding a status will not fit beside it.
- *
- * This is measured data, not a rune count. `len` on a frame counts runes, and
- * an emoji frame is one rune wide and two columns wide.
- * @param name {string} the catalogue name; unknown falls back like `get`
- * @return {Size} the columns and rows the animation occupies
+ * Measured size of an animation, in terminal columns, not runes: an emoji is
+ * one rune and two columns.
+ * @param name {string} catalogue name; unknown falls back to `dots`
+ * @return {Size} columns and rows
  */
 export func spinnerSize(name as string) {
     def spec as frames.Frames init frames.get($name);
-    return Size{ cols: $spec.cols, rows: $spec.rows };
+    return Size{cols: $spec.cols, rows: $spec.rows};
 }
 
 /**
- * Every spinner name the catalogue knows, for a `--spinner` flag's help text or
- * a picker.
- * @return {list of string} the names, sorted
+ * All catalogue names, for a `--spinner` flag's help or a picker.
+ * @return {list of string} names, sorted
  */
 export func spinnerNames() {
     return frames.names();

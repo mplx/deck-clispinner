@@ -1,27 +1,21 @@
 # SPDX-License-Identifier: MIT
-# Copyright (C) 2026 mplx <developer@mplx.eu>
+# Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
+# pragma-jennifer-version: >=0.25.0
 #
 # The frame data is from the cli-spinners project (MIT), by Sindre Sorhus:
 # https://github.com/sindresorhus/cli-spinners
 
 /**
- * The spinner frame catalogue: 90 named animations, each a list of frames and
- * the interval they were designed to run at.
+ * The spinner catalogue: 91 named animations, each a list of frames and its
+ * design interval. Pure data, no I/O.
  *
- * The data is a port of the `cli-spinners` npm package, which is the de facto
- * set every terminal spinner uses, so a name like `dots` or `line` animates the
- * way a user already expects it to. It is pure data with no I/O:
- * `clispinner.j` owns the rendering and the concurrency.
+ * 90 are ported from the `cli-spinners` npm package. Two departures from
+ * upstream: every frame is padded to its animation's width, so the status
+ * column does not move, and `soccerVertical` is added (`soccerHeader` turned
+ * on its side, 2 columns by 12 rows), the only multi-row animation.
  *
- * Two departures from upstream. Every frame is padded out to its animation's
- * full width, so the status text beside a spinner sits in a fixed column
- * instead of jumping about as the animation plays. And `soccerVertical` is
- * ours: `soccerHeader` turned on its side, because upstream ships nothing
- * taller than one row and multi-row rendering needs something to render.
- *
- * A name that is not in the catalogue is not an error here. `get` falls back to
- * the default so a caller never has to guard a lookup, and `has` answers the
- * question directly for a caller that wants to validate input.
+ * An unknown name is not an error: `get` falls back to `DEFAULT_NAME`; `has`
+ * validates a name.
  * @module frames
  * @example
  * import "./frames.j" as frames;
@@ -32,18 +26,14 @@ use lists;
 use maps;
 
 /**
- * One named animation, with the size of the box it draws in.
- *
- * `cols` and `rows` are measured at generation time and baked in, because a
- * terminal cell count is not something the interpreter can work out: `len` on a
- * string counts runes, and a run of runes is not a run of columns. An emoji is
- * one rune and two columns, a combining mark is one rune and none. A renderer
- * that needs to keep a line inside the terminal has to be told.
- * @field name {string} the catalogue name
- * @field interval {int} the frame interval in milliseconds the design assumes
- * @field cols {int} terminal columns every frame occupies; they are padded to match
- * @field rows {int} lines a frame occupies; 1 for every animation shipped today
- * @field frames {list of string} the frames, in order
+ * One named animation and the box it draws in. `cols` and `rows` are measured
+ * at generation time: `len` counts runes, and an emoji is one rune and two
+ * columns, a combining mark one rune and none.
+ * @field name {string} catalogue name
+ * @field interval {int} design frame interval in milliseconds
+ * @field cols {int} terminal columns every frame occupies, after padding
+ * @field rows {int} lines every frame occupies; 12 for `soccerVertical`, else 1
+ * @field frames {list of string} frames, in order
  */
 export def struct Frames {
     name as string,
@@ -53,392 +43,1276 @@ export def struct Frames {
     frames as list of string
 };
 
-/** The name used when a caller asks for one the catalogue does not have. */
+/** Animation `get` returns for an unknown name. */
 export def const DEFAULT_NAME as string init "dots";
 
 # The catalogue itself, built once at module load.
 def const CATALOGUE as map of string to Frames init {
-    "aesthetic": Frames{ name: "aesthetic", interval: 80, cols: 7, rows: 1,
+    "aesthetic": Frames{
+        name: "aesthetic",
+        interval: 80,
+        cols: 7,
+        rows: 1,
         frames: [
-            "▰▱▱▱▱▱▱", "▰▰▱▱▱▱▱", "▰▰▰▱▱▱▱", "▰▰▰▰▱▱▱", "▰▰▰▰▰▱▱", "▰▰▰▰▰▰▱", "▰▰▰▰▰▰▰",
+            "▰▱▱▱▱▱▱",
+            "▰▰▱▱▱▱▱",
+            "▰▰▰▱▱▱▱",
+            "▰▰▰▰▱▱▱",
+            "▰▰▰▰▰▱▱",
+            "▰▰▰▰▰▰▱",
+            "▰▰▰▰▰▰▰",
             "▰▱▱▱▱▱▱"
-    ]},
-    "arc": Frames{ name: "arc", interval: 100, cols: 1, rows: 1,
+        ]
+    },
+    "arc": Frames{
+        name: "arc",
+        interval: 100,
+        cols: 1,
+        rows: 1,
+        frames: ["◜", "◠", "◝", "◞", "◡", "◟"]
+    },
+    "arrow": Frames{
+        name: "arrow",
+        interval: 100,
+        cols: 1,
+        rows: 1,
+        frames: ["←", "↖", "↑", "↗", "→", "↘", "↓", "↙"]
+    },
+    "arrow2": Frames{
+        name: "arrow2",
+        interval: 80,
+        cols: 3,
+        rows: 1,
+        frames: ["⬆️ ", "↗️ ", "➡️ ", "↘️ ", "⬇️ ", "↙️ ", "⬅️ ", "↖️ "]
+    },
+    "arrow3": Frames{
+        name: "arrow3",
+        interval: 120,
+        cols: 5,
+        rows: 1,
+        frames: ["▹▹▹▹▹", "▸▹▹▹▹", "▹▸▹▹▹", "▹▹▸▹▹", "▹▹▹▸▹", "▹▹▹▹▸"]
+    },
+    "balloon": Frames{
+        name: "balloon",
+        interval: 140,
+        cols: 1,
+        rows: 1,
+        frames: [" ", ".", "o", "O", "@", "*", " "]
+    },
+    "balloon2": Frames{
+        name: "balloon2",
+        interval: 120,
+        cols: 1,
+        rows: 1,
+        frames: [".", "o", "O", "°", "O", "o", "."]
+    },
+    "betaWave": Frames{
+        name: "betaWave",
+        interval: 80,
+        cols: 7,
+        rows: 1,
+        frames: ["ρββββββ", "βρβββββ", "ββρββββ", "βββρβββ", "ββββρββ", "βββββρβ", "ββββββρ"]
+    },
+    "binary": Frames{
+        name: "binary",
+        interval: 80,
+        cols: 6,
+        rows: 1,
         frames: [
-            "◜", "◠", "◝", "◞", "◡", "◟"
-    ]},
-    "arrow": Frames{ name: "arrow", interval: 100, cols: 1, rows: 1,
+            "010010",
+            "001100",
+            "100101",
+            "111010",
+            "111101",
+            "010111",
+            "101011",
+            "111000",
+            "110011",
+            "110101"
+        ]
+    },
+    "bluePulse": Frames{
+        name: "bluePulse",
+        interval: 100,
+        cols: 3,
+        rows: 1,
+        frames: ["🔹 ", "🔷 ", "🔵 ", "🔵 ", "🔷 "]
+    },
+    "bounce": Frames{name: "bounce", interval: 120, cols: 1, rows: 1, frames: ["⠁", "⠂", "⠄", "⠂"]},
+    "bouncingBall": Frames{
+        name: "bouncingBall",
+        interval: 80,
+        cols: 8,
+        rows: 1,
         frames: [
-            "←", "↖", "↑", "↗", "→", "↘", "↓", "↙"
-    ]},
-    "arrow2": Frames{ name: "arrow2", interval: 80, cols: 3, rows: 1,
+            "( ●    )",
+            "(  ●   )",
+            "(   ●  )",
+            "(    ● )",
+            "(     ●)",
+            "(    ● )",
+            "(   ●  )",
+            "(  ●   )",
+            "( ●    )",
+            "(●     )"
+        ]
+    },
+    "bouncingBar": Frames{
+        name: "bouncingBar",
+        interval: 80,
+        cols: 6,
+        rows: 1,
         frames: [
-            "⬆️ ", "↗️ ", "➡️ ", "↘️ ", "⬇️ ", "↙️ ", "⬅️ ", "↖️ "
-    ]},
-    "arrow3": Frames{ name: "arrow3", interval: 120, cols: 5, rows: 1,
+            "[    ]",
+            "[=   ]",
+            "[==  ]",
+            "[=== ]",
+            "[====]",
+            "[ ===]",
+            "[  ==]",
+            "[   =]",
+            "[    ]",
+            "[   =]",
+            "[  ==]",
+            "[ ===]",
+            "[====]",
+            "[=== ]",
+            "[==  ]",
+            "[=   ]"
+        ]
+    },
+    "boxBounce": Frames{
+        name: "boxBounce",
+        interval: 120,
+        cols: 1,
+        rows: 1,
+        frames: ["▖", "▘", "▝", "▗"]
+    },
+    "boxBounce2": Frames{
+        name: "boxBounce2",
+        interval: 100,
+        cols: 1,
+        rows: 1,
+        frames: ["▌", "▀", "▐", "▄"]
+    },
+    "christmas": Frames{name: "christmas", interval: 400, cols: 2, rows: 1, frames: ["🌲", "🎄"]},
+    "circle": Frames{name: "circle", interval: 120, cols: 1, rows: 1, frames: ["◡", "⊙", "◠"]},
+    "circleHalves": Frames{
+        name: "circleHalves",
+        interval: 50,
+        cols: 1,
+        rows: 1,
+        frames: ["◐", "◓", "◑", "◒"]
+    },
+    "circleQuarters": Frames{
+        name: "circleQuarters",
+        interval: 120,
+        cols: 1,
+        rows: 1,
+        frames: ["◴", "◷", "◶", "◵"]
+    },
+    "clock": Frames{
+        name: "clock",
+        interval: 100,
+        cols: 3,
+        rows: 1,
+        frames: ["🕛 ", "🕐 ", "🕑 ", "🕒 ", "🕓 ", "🕔 ", "🕕 ", "🕖 ", "🕗 ", "🕘 ", "🕙 ", "🕚 "]
+    },
+    "dots": Frames{
+        name: "dots",
+        interval: 80,
+        cols: 1,
+        rows: 1,
+        frames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    },
+    "dots10": Frames{
+        name: "dots10",
+        interval: 80,
+        cols: 1,
+        rows: 1,
+        frames: ["⢄", "⢂", "⢁", "⡁", "⡈", "⡐", "⡠"]
+    },
+    "dots11": Frames{
+        name: "dots11",
+        interval: 100,
+        cols: 1,
+        rows: 1,
+        frames: ["⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈"]
+    },
+    "dots12": Frames{
+        name: "dots12",
+        interval: 80,
+        cols: 2,
+        rows: 1,
         frames: [
-            "▹▹▹▹▹", "▸▹▹▹▹", "▹▸▹▹▹", "▹▹▸▹▹", "▹▹▹▸▹", "▹▹▹▹▸"
-    ]},
-    "balloon": Frames{ name: "balloon", interval: 140, cols: 1, rows: 1,
+            "⢀⠀",
+            "⡀⠀",
+            "⠄⠀",
+            "⢂⠀",
+            "⡂⠀",
+            "⠅⠀",
+            "⢃⠀",
+            "⡃⠀",
+            "⠍⠀",
+            "⢋⠀",
+            "⡋⠀",
+            "⠍⠁",
+            "⢋⠁",
+            "⡋⠁",
+            "⠍⠉",
+            "⠋⠉",
+            "⠋⠉",
+            "⠉⠙",
+            "⠉⠙",
+            "⠉⠩",
+            "⠈⢙",
+            "⠈⡙",
+            "⢈⠩",
+            "⡀⢙",
+            "⠄⡙",
+            "⢂⠩",
+            "⡂⢘",
+            "⠅⡘",
+            "⢃⠨",
+            "⡃⢐",
+            "⠍⡐",
+            "⢋⠠",
+            "⡋⢀",
+            "⠍⡁",
+            "⢋⠁",
+            "⡋⠁",
+            "⠍⠉",
+            "⠋⠉",
+            "⠋⠉",
+            "⠉⠙",
+            "⠉⠙",
+            "⠉⠩",
+            "⠈⢙",
+            "⠈⡙",
+            "⠈⠩",
+            "⠀⢙",
+            "⠀⡙",
+            "⠀⠩",
+            "⠀⢘",
+            "⠀⡘",
+            "⠀⠨",
+            "⠀⢐",
+            "⠀⡐",
+            "⠀⠠",
+            "⠀⢀",
+            "⠀⡀"
+        ]
+    },
+    "dots13": Frames{
+        name: "dots13",
+        interval: 80,
+        cols: 1,
+        rows: 1,
+        frames: ["⣼", "⣹", "⢻", "⠿", "⡟", "⣏", "⣧", "⣶"]
+    },
+    "dots14": Frames{
+        name: "dots14",
+        interval: 80,
+        cols: 2,
+        rows: 1,
+        frames: ["⠉⠉", "⠈⠙", "⠀⠹", "⠀⢸", "⠀⣰", "⢀⣠", "⣀⣀", "⣄⡀", "⣆⠀", "⡇⠀", "⠏⠀", "⠋⠁"]
+    },
+    "dots2": Frames{
+        name: "dots2",
+        interval: 80,
+        cols: 1,
+        rows: 1,
+        frames: ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"]
+    },
+    "dots3": Frames{
+        name: "dots3",
+        interval: 80,
+        cols: 1,
+        rows: 1,
+        frames: ["⠋", "⠙", "⠚", "⠞", "⠖", "⠦", "⠴", "⠲", "⠳", "⠓"]
+    },
+    "dots4": Frames{
+        name: "dots4",
+        interval: 80,
+        cols: 1,
+        rows: 1,
+        frames: ["⠄", "⠆", "⠇", "⠋", "⠙", "⠸", "⠰", "⠠", "⠰", "⠸", "⠙", "⠋", "⠇", "⠆"]
+    },
+    "dots5": Frames{
+        name: "dots5",
+        interval: 80,
+        cols: 1,
+        rows: 1,
         frames: [
-            " ", ".", "o", "O", "@", "*", " "
-    ]},
-    "balloon2": Frames{ name: "balloon2", interval: 120, cols: 1, rows: 1,
+            "⠋",
+            "⠙",
+            "⠚",
+            "⠒",
+            "⠂",
+            "⠂",
+            "⠒",
+            "⠲",
+            "⠴",
+            "⠦",
+            "⠖",
+            "⠒",
+            "⠐",
+            "⠐",
+            "⠒",
+            "⠓",
+            "⠋"
+        ]
+    },
+    "dots6": Frames{
+        name: "dots6",
+        interval: 80,
+        cols: 1,
+        rows: 1,
         frames: [
-            ".", "o", "O", "°", "O", "o", "."
-    ]},
-    "betaWave": Frames{ name: "betaWave", interval: 80, cols: 7, rows: 1,
+            "⠁",
+            "⠉",
+            "⠙",
+            "⠚",
+            "⠒",
+            "⠂",
+            "⠂",
+            "⠒",
+            "⠲",
+            "⠴",
+            "⠤",
+            "⠄",
+            "⠄",
+            "⠤",
+            "⠴",
+            "⠲",
+            "⠒",
+            "⠂",
+            "⠂",
+            "⠒",
+            "⠚",
+            "⠙",
+            "⠉",
+            "⠁"
+        ]
+    },
+    "dots7": Frames{
+        name: "dots7",
+        interval: 80,
+        cols: 1,
+        rows: 1,
         frames: [
-            "ρββββββ", "βρβββββ", "ββρββββ", "βββρβββ", "ββββρββ", "βββββρβ", "ββββββρ"
-    ]},
-    "binary": Frames{ name: "binary", interval: 80, cols: 6, rows: 1,
+            "⠈",
+            "⠉",
+            "⠋",
+            "⠓",
+            "⠒",
+            "⠐",
+            "⠐",
+            "⠒",
+            "⠖",
+            "⠦",
+            "⠤",
+            "⠠",
+            "⠠",
+            "⠤",
+            "⠦",
+            "⠖",
+            "⠒",
+            "⠐",
+            "⠐",
+            "⠒",
+            "⠓",
+            "⠋",
+            "⠉",
+            "⠈"
+        ]
+    },
+    "dots8": Frames{
+        name: "dots8",
+        interval: 80,
+        cols: 1,
+        rows: 1,
         frames: [
-            "010010", "001100", "100101", "111010", "111101", "010111", "101011", "111000",
-            "110011", "110101"
-    ]},
-    "bluePulse": Frames{ name: "bluePulse", interval: 100, cols: 3, rows: 1,
+            "⠁",
+            "⠁",
+            "⠉",
+            "⠙",
+            "⠚",
+            "⠒",
+            "⠂",
+            "⠂",
+            "⠒",
+            "⠲",
+            "⠴",
+            "⠤",
+            "⠄",
+            "⠄",
+            "⠤",
+            "⠠",
+            "⠠",
+            "⠤",
+            "⠦",
+            "⠖",
+            "⠒",
+            "⠐",
+            "⠐",
+            "⠒",
+            "⠓",
+            "⠋",
+            "⠉",
+            "⠈",
+            "⠈"
+        ]
+    },
+    "dots8Bit": Frames{
+        name: "dots8Bit",
+        interval: 80,
+        cols: 1,
+        rows: 1,
         frames: [
-            "🔹 ", "🔷 ", "🔵 ", "🔵 ", "🔷 "
-    ]},
-    "bounce": Frames{ name: "bounce", interval: 120, cols: 1, rows: 1,
-        frames: [
-            "⠁", "⠂", "⠄", "⠂"
-    ]},
-    "bouncingBall": Frames{ name: "bouncingBall", interval: 80, cols: 8, rows: 1,
-        frames: [
-            "( ●    )", "(  ●   )", "(   ●  )", "(    ● )", "(     ●)", "(    ● )", "(   ●  )",
-            "(  ●   )", "( ●    )", "(●     )"
-    ]},
-    "bouncingBar": Frames{ name: "bouncingBar", interval: 80, cols: 6, rows: 1,
-        frames: [
-            "[    ]", "[=   ]", "[==  ]", "[=== ]", "[====]", "[ ===]", "[  ==]", "[   =]",
-            "[    ]", "[   =]", "[  ==]", "[ ===]", "[====]", "[=== ]", "[==  ]", "[=   ]"
-    ]},
-    "boxBounce": Frames{ name: "boxBounce", interval: 120, cols: 1, rows: 1,
-        frames: [
-            "▖", "▘", "▝", "▗"
-    ]},
-    "boxBounce2": Frames{ name: "boxBounce2", interval: 100, cols: 1, rows: 1,
-        frames: [
-            "▌", "▀", "▐", "▄"
-    ]},
-    "christmas": Frames{ name: "christmas", interval: 400, cols: 2, rows: 1,
-        frames: [
-            "🌲", "🎄"
-    ]},
-    "circle": Frames{ name: "circle", interval: 120, cols: 1, rows: 1,
-        frames: [
-            "◡", "⊙", "◠"
-    ]},
-    "circleHalves": Frames{ name: "circleHalves", interval: 50, cols: 1, rows: 1,
-        frames: [
-            "◐", "◓", "◑", "◒"
-    ]},
-    "circleQuarters": Frames{ name: "circleQuarters", interval: 120, cols: 1, rows: 1,
-        frames: [
-            "◴", "◷", "◶", "◵"
-    ]},
-    "clock": Frames{ name: "clock", interval: 100, cols: 3, rows: 1,
-        frames: [
-            "🕛 ", "🕐 ", "🕑 ", "🕒 ", "🕓 ", "🕔 ", "🕕 ", "🕖 ", "🕗 ", "🕘 ", "🕙 ", "🕚 "
-    ]},
-    "dots": Frames{ name: "dots", interval: 80, cols: 1, rows: 1,
-        frames: [
-            "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"
-    ]},
-    "dots10": Frames{ name: "dots10", interval: 80, cols: 1, rows: 1,
-        frames: [
-            "⢄", "⢂", "⢁", "⡁", "⡈", "⡐", "⡠"
-    ]},
-    "dots11": Frames{ name: "dots11", interval: 100, cols: 1, rows: 1,
-        frames: [
-            "⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈"
-    ]},
-    "dots12": Frames{ name: "dots12", interval: 80, cols: 2, rows: 1,
-        frames: [
-            "⢀⠀", "⡀⠀", "⠄⠀", "⢂⠀", "⡂⠀", "⠅⠀", "⢃⠀", "⡃⠀", "⠍⠀", "⢋⠀", "⡋⠀", "⠍⠁", "⢋⠁", "⡋⠁",
-            "⠍⠉", "⠋⠉", "⠋⠉", "⠉⠙", "⠉⠙", "⠉⠩", "⠈⢙", "⠈⡙", "⢈⠩", "⡀⢙", "⠄⡙", "⢂⠩", "⡂⢘", "⠅⡘",
-            "⢃⠨", "⡃⢐", "⠍⡐", "⢋⠠", "⡋⢀", "⠍⡁", "⢋⠁", "⡋⠁", "⠍⠉", "⠋⠉", "⠋⠉", "⠉⠙", "⠉⠙", "⠉⠩",
-            "⠈⢙", "⠈⡙", "⠈⠩", "⠀⢙", "⠀⡙", "⠀⠩", "⠀⢘", "⠀⡘", "⠀⠨", "⠀⢐", "⠀⡐", "⠀⠠", "⠀⢀", "⠀⡀"
-    ]},
-    "dots13": Frames{ name: "dots13", interval: 80, cols: 1, rows: 1,
-        frames: [
-            "⣼", "⣹", "⢻", "⠿", "⡟", "⣏", "⣧", "⣶"
-    ]},
-    "dots14": Frames{ name: "dots14", interval: 80, cols: 2, rows: 1,
-        frames: [
-            "⠉⠉", "⠈⠙", "⠀⠹", "⠀⢸", "⠀⣰", "⢀⣠", "⣀⣀", "⣄⡀", "⣆⠀", "⡇⠀", "⠏⠀", "⠋⠁"
-    ]},
-    "dots2": Frames{ name: "dots2", interval: 80, cols: 1, rows: 1,
-        frames: [
-            "⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"
-    ]},
-    "dots3": Frames{ name: "dots3", interval: 80, cols: 1, rows: 1,
-        frames: [
-            "⠋", "⠙", "⠚", "⠞", "⠖", "⠦", "⠴", "⠲", "⠳", "⠓"
-    ]},
-    "dots4": Frames{ name: "dots4", interval: 80, cols: 1, rows: 1,
-        frames: [
-            "⠄", "⠆", "⠇", "⠋", "⠙", "⠸", "⠰", "⠠", "⠰", "⠸", "⠙", "⠋", "⠇", "⠆"
-    ]},
-    "dots5": Frames{ name: "dots5", interval: 80, cols: 1, rows: 1,
-        frames: [
-            "⠋", "⠙", "⠚", "⠒", "⠂", "⠂", "⠒", "⠲", "⠴", "⠦", "⠖", "⠒", "⠐", "⠐", "⠒", "⠓", "⠋"
-    ]},
-    "dots6": Frames{ name: "dots6", interval: 80, cols: 1, rows: 1,
-        frames: [
-            "⠁", "⠉", "⠙", "⠚", "⠒", "⠂", "⠂", "⠒", "⠲", "⠴", "⠤", "⠄", "⠄", "⠤", "⠴", "⠲", "⠒",
-            "⠂", "⠂", "⠒", "⠚", "⠙", "⠉", "⠁"
-    ]},
-    "dots7": Frames{ name: "dots7", interval: 80, cols: 1, rows: 1,
-        frames: [
-            "⠈", "⠉", "⠋", "⠓", "⠒", "⠐", "⠐", "⠒", "⠖", "⠦", "⠤", "⠠", "⠠", "⠤", "⠦", "⠖", "⠒",
-            "⠐", "⠐", "⠒", "⠓", "⠋", "⠉", "⠈"
-    ]},
-    "dots8": Frames{ name: "dots8", interval: 80, cols: 1, rows: 1,
-        frames: [
-            "⠁", "⠁", "⠉", "⠙", "⠚", "⠒", "⠂", "⠂", "⠒", "⠲", "⠴", "⠤", "⠄", "⠄", "⠤", "⠠", "⠠",
-            "⠤", "⠦", "⠖", "⠒", "⠐", "⠐", "⠒", "⠓", "⠋", "⠉", "⠈", "⠈"
-    ]},
-    "dots8Bit": Frames{ name: "dots8Bit", interval: 80, cols: 1, rows: 1,
-        frames: [
-            "⠀", "⠁", "⠂", "⠃", "⠄", "⠅", "⠆", "⠇", "⡀", "⡁", "⡂", "⡃", "⡄", "⡅", "⡆", "⡇", "⠈",
-            "⠉", "⠊", "⠋", "⠌", "⠍", "⠎", "⠏", "⡈", "⡉", "⡊", "⡋", "⡌", "⡍", "⡎", "⡏", "⠐", "⠑",
-            "⠒", "⠓", "⠔", "⠕", "⠖", "⠗", "⡐", "⡑", "⡒", "⡓", "⡔", "⡕", "⡖", "⡗", "⠘", "⠙", "⠚",
-            "⠛", "⠜", "⠝", "⠞", "⠟", "⡘", "⡙", "⡚", "⡛", "⡜", "⡝", "⡞", "⡟", "⠠", "⠡", "⠢", "⠣",
-            "⠤", "⠥", "⠦", "⠧", "⡠", "⡡", "⡢", "⡣", "⡤", "⡥", "⡦", "⡧", "⠨", "⠩", "⠪", "⠫", "⠬",
-            "⠭", "⠮", "⠯", "⡨", "⡩", "⡪", "⡫", "⡬", "⡭", "⡮", "⡯", "⠰", "⠱", "⠲", "⠳", "⠴", "⠵",
-            "⠶", "⠷", "⡰", "⡱", "⡲", "⡳", "⡴", "⡵", "⡶", "⡷", "⠸", "⠹", "⠺", "⠻", "⠼", "⠽", "⠾",
-            "⠿", "⡸", "⡹", "⡺", "⡻", "⡼", "⡽", "⡾", "⡿", "⢀", "⢁", "⢂", "⢃", "⢄", "⢅", "⢆", "⢇",
-            "⣀", "⣁", "⣂", "⣃", "⣄", "⣅", "⣆", "⣇", "⢈", "⢉", "⢊", "⢋", "⢌", "⢍", "⢎", "⢏", "⣈",
-            "⣉", "⣊", "⣋", "⣌", "⣍", "⣎", "⣏", "⢐", "⢑", "⢒", "⢓", "⢔", "⢕", "⢖", "⢗", "⣐", "⣑",
-            "⣒", "⣓", "⣔", "⣕", "⣖", "⣗", "⢘", "⢙", "⢚", "⢛", "⢜", "⢝", "⢞", "⢟", "⣘", "⣙", "⣚",
-            "⣛", "⣜", "⣝", "⣞", "⣟", "⢠", "⢡", "⢢", "⢣", "⢤", "⢥", "⢦", "⢧", "⣠", "⣡", "⣢", "⣣",
-            "⣤", "⣥", "⣦", "⣧", "⢨", "⢩", "⢪", "⢫", "⢬", "⢭", "⢮", "⢯", "⣨", "⣩", "⣪", "⣫", "⣬",
-            "⣭", "⣮", "⣯", "⢰", "⢱", "⢲", "⢳", "⢴", "⢵", "⢶", "⢷", "⣰", "⣱", "⣲", "⣳", "⣴", "⣵",
-            "⣶", "⣷", "⢸", "⢹", "⢺", "⢻", "⢼", "⢽", "⢾", "⢿", "⣸", "⣹", "⣺", "⣻", "⣼", "⣽", "⣾",
+            "⠀",
+            "⠁",
+            "⠂",
+            "⠃",
+            "⠄",
+            "⠅",
+            "⠆",
+            "⠇",
+            "⡀",
+            "⡁",
+            "⡂",
+            "⡃",
+            "⡄",
+            "⡅",
+            "⡆",
+            "⡇",
+            "⠈",
+            "⠉",
+            "⠊",
+            "⠋",
+            "⠌",
+            "⠍",
+            "⠎",
+            "⠏",
+            "⡈",
+            "⡉",
+            "⡊",
+            "⡋",
+            "⡌",
+            "⡍",
+            "⡎",
+            "⡏",
+            "⠐",
+            "⠑",
+            "⠒",
+            "⠓",
+            "⠔",
+            "⠕",
+            "⠖",
+            "⠗",
+            "⡐",
+            "⡑",
+            "⡒",
+            "⡓",
+            "⡔",
+            "⡕",
+            "⡖",
+            "⡗",
+            "⠘",
+            "⠙",
+            "⠚",
+            "⠛",
+            "⠜",
+            "⠝",
+            "⠞",
+            "⠟",
+            "⡘",
+            "⡙",
+            "⡚",
+            "⡛",
+            "⡜",
+            "⡝",
+            "⡞",
+            "⡟",
+            "⠠",
+            "⠡",
+            "⠢",
+            "⠣",
+            "⠤",
+            "⠥",
+            "⠦",
+            "⠧",
+            "⡠",
+            "⡡",
+            "⡢",
+            "⡣",
+            "⡤",
+            "⡥",
+            "⡦",
+            "⡧",
+            "⠨",
+            "⠩",
+            "⠪",
+            "⠫",
+            "⠬",
+            "⠭",
+            "⠮",
+            "⠯",
+            "⡨",
+            "⡩",
+            "⡪",
+            "⡫",
+            "⡬",
+            "⡭",
+            "⡮",
+            "⡯",
+            "⠰",
+            "⠱",
+            "⠲",
+            "⠳",
+            "⠴",
+            "⠵",
+            "⠶",
+            "⠷",
+            "⡰",
+            "⡱",
+            "⡲",
+            "⡳",
+            "⡴",
+            "⡵",
+            "⡶",
+            "⡷",
+            "⠸",
+            "⠹",
+            "⠺",
+            "⠻",
+            "⠼",
+            "⠽",
+            "⠾",
+            "⠿",
+            "⡸",
+            "⡹",
+            "⡺",
+            "⡻",
+            "⡼",
+            "⡽",
+            "⡾",
+            "⡿",
+            "⢀",
+            "⢁",
+            "⢂",
+            "⢃",
+            "⢄",
+            "⢅",
+            "⢆",
+            "⢇",
+            "⣀",
+            "⣁",
+            "⣂",
+            "⣃",
+            "⣄",
+            "⣅",
+            "⣆",
+            "⣇",
+            "⢈",
+            "⢉",
+            "⢊",
+            "⢋",
+            "⢌",
+            "⢍",
+            "⢎",
+            "⢏",
+            "⣈",
+            "⣉",
+            "⣊",
+            "⣋",
+            "⣌",
+            "⣍",
+            "⣎",
+            "⣏",
+            "⢐",
+            "⢑",
+            "⢒",
+            "⢓",
+            "⢔",
+            "⢕",
+            "⢖",
+            "⢗",
+            "⣐",
+            "⣑",
+            "⣒",
+            "⣓",
+            "⣔",
+            "⣕",
+            "⣖",
+            "⣗",
+            "⢘",
+            "⢙",
+            "⢚",
+            "⢛",
+            "⢜",
+            "⢝",
+            "⢞",
+            "⢟",
+            "⣘",
+            "⣙",
+            "⣚",
+            "⣛",
+            "⣜",
+            "⣝",
+            "⣞",
+            "⣟",
+            "⢠",
+            "⢡",
+            "⢢",
+            "⢣",
+            "⢤",
+            "⢥",
+            "⢦",
+            "⢧",
+            "⣠",
+            "⣡",
+            "⣢",
+            "⣣",
+            "⣤",
+            "⣥",
+            "⣦",
+            "⣧",
+            "⢨",
+            "⢩",
+            "⢪",
+            "⢫",
+            "⢬",
+            "⢭",
+            "⢮",
+            "⢯",
+            "⣨",
+            "⣩",
+            "⣪",
+            "⣫",
+            "⣬",
+            "⣭",
+            "⣮",
+            "⣯",
+            "⢰",
+            "⢱",
+            "⢲",
+            "⢳",
+            "⢴",
+            "⢵",
+            "⢶",
+            "⢷",
+            "⣰",
+            "⣱",
+            "⣲",
+            "⣳",
+            "⣴",
+            "⣵",
+            "⣶",
+            "⣷",
+            "⢸",
+            "⢹",
+            "⢺",
+            "⢻",
+            "⢼",
+            "⢽",
+            "⢾",
+            "⢿",
+            "⣸",
+            "⣹",
+            "⣺",
+            "⣻",
+            "⣼",
+            "⣽",
+            "⣾",
             "⣿"
-    ]},
-    "dots9": Frames{ name: "dots9", interval: 80, cols: 1, rows: 1,
+        ]
+    },
+    "dots9": Frames{
+        name: "dots9",
+        interval: 80,
+        cols: 1,
+        rows: 1,
+        frames: ["⢹", "⢺", "⢼", "⣸", "⣇", "⡧", "⡗", "⡏"]
+    },
+    "dotsCircle": Frames{
+        name: "dotsCircle",
+        interval: 80,
+        cols: 2,
+        rows: 1,
+        frames: ["⢎ ", "⠎⠁", "⠊⠑", "⠈⠱", " ⡱", "⢀⡰", "⢄⡠", "⢆⡀"]
+    },
+    "dqpb": Frames{name: "dqpb", interval: 100, cols: 1, rows: 1, frames: ["d", "q", "p", "b"]},
+    "dwarfFortress": Frames{
+        name: "dwarfFortress",
+        interval: 80,
+        cols: 12,
+        rows: 1,
         frames: [
-            "⢹", "⢺", "⢼", "⣸", "⣇", "⡧", "⡗", "⡏"
-    ]},
-    "dotsCircle": Frames{ name: "dotsCircle", interval: 80, cols: 2, rows: 1,
+            " ██████£££  ",
+            "☺██████£££  ",
+            "☺██████£££  ",
+            "☺▓█████£££  ",
+            "☺▓█████£££  ",
+            "☺▒█████£££  ",
+            "☺▒█████£££  ",
+            "☺░█████£££  ",
+            "☺░█████£££  ",
+            "☺ █████£££  ",
+            " ☺█████£££  ",
+            " ☺█████£££  ",
+            " ☺▓████£££  ",
+            " ☺▓████£££  ",
+            " ☺▒████£££  ",
+            " ☺▒████£££  ",
+            " ☺░████£££  ",
+            " ☺░████£££  ",
+            " ☺ ████£££  ",
+            "  ☺████£££  ",
+            "  ☺████£££  ",
+            "  ☺▓███£££  ",
+            "  ☺▓███£££  ",
+            "  ☺▒███£££  ",
+            "  ☺▒███£££  ",
+            "  ☺░███£££  ",
+            "  ☺░███£££  ",
+            "  ☺ ███£££  ",
+            "   ☺███£££  ",
+            "   ☺███£££  ",
+            "   ☺▓██£££  ",
+            "   ☺▓██£££  ",
+            "   ☺▒██£££  ",
+            "   ☺▒██£££  ",
+            "   ☺░██£££  ",
+            "   ☺░██£££  ",
+            "   ☺ ██£££  ",
+            "    ☺██£££  ",
+            "    ☺██£££  ",
+            "    ☺▓█£££  ",
+            "    ☺▓█£££  ",
+            "    ☺▒█£££  ",
+            "    ☺▒█£££  ",
+            "    ☺░█£££  ",
+            "    ☺░█£££  ",
+            "    ☺ █£££  ",
+            "     ☺█£££  ",
+            "     ☺█£££  ",
+            "     ☺▓£££  ",
+            "     ☺▓£££  ",
+            "     ☺▒£££  ",
+            "     ☺▒£££  ",
+            "     ☺░£££  ",
+            "     ☺░£££  ",
+            "     ☺ £££  ",
+            "      ☺£££  ",
+            "      ☺£££  ",
+            "      ☺▓££  ",
+            "      ☺▓££  ",
+            "      ☺▒££  ",
+            "      ☺▒££  ",
+            "      ☺░££  ",
+            "      ☺░££  ",
+            "      ☺ ££  ",
+            "       ☺££  ",
+            "       ☺££  ",
+            "       ☺▓£  ",
+            "       ☺▓£  ",
+            "       ☺▒£  ",
+            "       ☺▒£  ",
+            "       ☺░£  ",
+            "       ☺░£  ",
+            "       ☺ £  ",
+            "        ☺£  ",
+            "        ☺£  ",
+            "        ☺▓  ",
+            "        ☺▓  ",
+            "        ☺▒  ",
+            "        ☺▒  ",
+            "        ☺░  ",
+            "        ☺░  ",
+            "        ☺   ",
+            "        ☺  &",
+            "        ☺ ☼&",
+            "       ☺ ☼ &",
+            "       ☺☼  &",
+            "      ☺☼  & ",
+            "      ‼   & ",
+            "     ☺   &  ",
+            "    ‼    &  ",
+            "   ☺    &   ",
+            "  ‼     &   ",
+            " ☺     &    ",
+            "‼      &    ",
+            "      &     ",
+            "      &     ",
+            "     &   ░  ",
+            "     &   ▒  ",
+            "    &    ▓  ",
+            "    &    £  ",
+            "   &    ░£  ",
+            "   &    ▒£  ",
+            "  &     ▓£  ",
+            "  &     ££  ",
+            " &     ░££  ",
+            " &     ▒££  ",
+            "&      ▓££  ",
+            "&      £££  ",
+            "      ░£££  ",
+            "      ▒£££  ",
+            "      ▓£££  ",
+            "      █£££  ",
+            "     ░█£££  ",
+            "     ▒█£££  ",
+            "     ▓█£££  ",
+            "     ██£££  ",
+            "    ░██£££  ",
+            "    ▒██£££  ",
+            "    ▓██£££  ",
+            "    ███£££  ",
+            "   ░███£££  ",
+            "   ▒███£££  ",
+            "   ▓███£££  ",
+            "   ████£££  ",
+            "  ░████£££  ",
+            "  ▒████£££  ",
+            "  ▓████£££  ",
+            "  █████£££  ",
+            " ░█████£££  ",
+            " ▒█████£££  ",
+            " ▓█████£££  ",
+            " ██████£££  ",
+            " ██████£££  "
+        ]
+    },
+    "earth": Frames{name: "earth", interval: 180, cols: 3, rows: 1, frames: ["🌍 ", "🌎 ", "🌏 "]},
+    "fingerDance": Frames{
+        name: "fingerDance",
+        interval: 160,
+        cols: 3,
+        rows: 1,
+        frames: ["🤘 ", "🤟 ", "🖖 ", "✋ ", "🤚 ", "👆 "]
+    },
+    "fish": Frames{
+        name: "fish",
+        interval: 80,
+        cols: 20,
+        rows: 1,
         frames: [
-            "⢎ ", "⠎⠁", "⠊⠑", "⠈⠱", " ⡱", "⢀⡰", "⢄⡠", "⢆⡀"
-    ]},
-    "dqpb": Frames{ name: "dqpb", interval: 100, cols: 1, rows: 1,
+            "~~~~~~~~~~~~~~~~~~~~",
+            "> ~~~~~~~~~~~~~~~~~~",
+            "º> ~~~~~~~~~~~~~~~~~",
+            "(º> ~~~~~~~~~~~~~~~~",
+            "((º> ~~~~~~~~~~~~~~~",
+            "<((º> ~~~~~~~~~~~~~~",
+            "><((º> ~~~~~~~~~~~~~",
+            " ><((º> ~~~~~~~~~~~~",
+            "~ ><((º> ~~~~~~~~~~~",
+            "~~ <>((º> ~~~~~~~~~~",
+            "~~~ ><((º> ~~~~~~~~~",
+            "~~~~ <>((º> ~~~~~~~~",
+            "~~~~~ ><((º> ~~~~~~~",
+            "~~~~~~ <>((º> ~~~~~~",
+            "~~~~~~~ ><((º> ~~~~~",
+            "~~~~~~~~ <>((º> ~~~~",
+            "~~~~~~~~~ ><((º> ~~~",
+            "~~~~~~~~~~ <>((º> ~~",
+            "~~~~~~~~~~~ ><((º> ~",
+            "~~~~~~~~~~~~ <>((º> ",
+            "~~~~~~~~~~~~~ ><((º>",
+            "~~~~~~~~~~~~~~ <>((º",
+            "~~~~~~~~~~~~~~~ ><((",
+            "~~~~~~~~~~~~~~~~ <>(",
+            "~~~~~~~~~~~~~~~~~ ><",
+            "~~~~~~~~~~~~~~~~~~ <",
+            "~~~~~~~~~~~~~~~~~~~~"
+        ]
+    },
+    "fistBump": Frames{
+        name: "fistBump",
+        interval: 80,
+        cols: 13,
+        rows: 1,
+        frames: ["🤜　　　　🤛 ", "🤜　　　　🤛 ", "🤜　　　　🤛 ", "　🤜　　🤛　 ", "　　🤜🤛　　 ", "　🤜✨🤛　　 ", "🤜　✨　🤛　 "]
+    },
+    "flip": Frames{
+        name: "flip",
+        interval: 70,
+        cols: 1,
+        rows: 1,
+        frames: ["_", "_", "_", "-", "`", "`", "'", "´", "-", "_", "_", "_"]
+    },
+    "grenade": Frames{
+        name: "grenade",
+        interval: 80,
+        cols: 3,
+        rows: 1,
         frames: [
-            "d", "q", "p", "b"
-    ]},
-    "dwarfFortress": Frames{ name: "dwarfFortress", interval: 80, cols: 12, rows: 1,
+            "،  ",
+            "′  ",
+            " ´ ",
+            " ‾ ",
+            "  ⸌",
+            "  ⸊",
+            "  |",
+            "  ⁎",
+            "  ⁕",
+            " ෴ ",
+            "  ⁓",
+            "   ",
+            "   ",
+            "   "
+        ]
+    },
+    "growHorizontal": Frames{
+        name: "growHorizontal",
+        interval: 120,
+        cols: 1,
+        rows: 1,
+        frames: ["▏", "▎", "▍", "▌", "▋", "▊", "▉", "▊", "▋", "▌", "▍", "▎"]
+    },
+    "growVertical": Frames{
+        name: "growVertical",
+        interval: 120,
+        cols: 1,
+        rows: 1,
+        frames: ["▁", "▃", "▄", "▅", "▆", "▇", "▆", "▅", "▄", "▃"]
+    },
+    "hamburger": Frames{
+        name: "hamburger",
+        interval: 100,
+        cols: 2,
+        rows: 1,
+        frames: ["☱", "☲", "☴"]
+    },
+    "hearts": Frames{
+        name: "hearts",
+        interval: 100,
+        cols: 3,
+        rows: 1,
+        frames: ["💛 ", "💙 ", "💜 ", "💚 ", "💗 "]
+    },
+    "layer": Frames{name: "layer", interval: 150, cols: 1, rows: 1, frames: ["-", "=", "≡"]},
+    "line": Frames{name: "line", interval: 130, cols: 1, rows: 1, frames: ["-", "\\", "|", "/"]},
+    "line2": Frames{
+        name: "line2",
+        interval: 100,
+        cols: 1,
+        rows: 1,
+        frames: ["⠂", "-", "–", "—", "–", "-"]
+    },
+    "material": Frames{
+        name: "material",
+        interval: 17,
+        cols: 20,
+        rows: 1,
         frames: [
-            " ██████£££  ", "☺██████£££  ", "☺██████£££  ", "☺▓█████£££  ", "☺▓█████£££  ",
-            "☺▒█████£££  ", "☺▒█████£££  ", "☺░█████£££  ", "☺░█████£££  ", "☺ █████£££  ",
-            " ☺█████£££  ", " ☺█████£££  ", " ☺▓████£££  ", " ☺▓████£££  ", " ☺▒████£££  ",
-            " ☺▒████£££  ", " ☺░████£££  ", " ☺░████£££  ", " ☺ ████£££  ", "  ☺████£££  ",
-            "  ☺████£££  ", "  ☺▓███£££  ", "  ☺▓███£££  ", "  ☺▒███£££  ", "  ☺▒███£££  ",
-            "  ☺░███£££  ", "  ☺░███£££  ", "  ☺ ███£££  ", "   ☺███£££  ", "   ☺███£££  ",
-            "   ☺▓██£££  ", "   ☺▓██£££  ", "   ☺▒██£££  ", "   ☺▒██£££  ", "   ☺░██£££  ",
-            "   ☺░██£££  ", "   ☺ ██£££  ", "    ☺██£££  ", "    ☺██£££  ", "    ☺▓█£££  ",
-            "    ☺▓█£££  ", "    ☺▒█£££  ", "    ☺▒█£££  ", "    ☺░█£££  ", "    ☺░█£££  ",
-            "    ☺ █£££  ", "     ☺█£££  ", "     ☺█£££  ", "     ☺▓£££  ", "     ☺▓£££  ",
-            "     ☺▒£££  ", "     ☺▒£££  ", "     ☺░£££  ", "     ☺░£££  ", "     ☺ £££  ",
-            "      ☺£££  ", "      ☺£££  ", "      ☺▓££  ", "      ☺▓££  ", "      ☺▒££  ",
-            "      ☺▒££  ", "      ☺░££  ", "      ☺░££  ", "      ☺ ££  ", "       ☺££  ",
-            "       ☺££  ", "       ☺▓£  ", "       ☺▓£  ", "       ☺▒£  ", "       ☺▒£  ",
-            "       ☺░£  ", "       ☺░£  ", "       ☺ £  ", "        ☺£  ", "        ☺£  ",
-            "        ☺▓  ", "        ☺▓  ", "        ☺▒  ", "        ☺▒  ", "        ☺░  ",
-            "        ☺░  ", "        ☺   ", "        ☺  &", "        ☺ ☼&", "       ☺ ☼ &",
-            "       ☺☼  &", "      ☺☼  & ", "      ‼   & ", "     ☺   &  ", "    ‼    &  ",
-            "   ☺    &   ", "  ‼     &   ", " ☺     &    ", "‼      &    ", "      &     ",
-            "      &     ", "     &   ░  ", "     &   ▒  ", "    &    ▓  ", "    &    £  ",
-            "   &    ░£  ", "   &    ▒£  ", "  &     ▓£  ", "  &     ££  ", " &     ░££  ",
-            " &     ▒££  ", "&      ▓££  ", "&      £££  ", "      ░£££  ", "      ▒£££  ",
-            "      ▓£££  ", "      █£££  ", "     ░█£££  ", "     ▒█£££  ", "     ▓█£££  ",
-            "     ██£££  ", "    ░██£££  ", "    ▒██£££  ", "    ▓██£££  ", "    ███£££  ",
-            "   ░███£££  ", "   ▒███£££  ", "   ▓███£££  ", "   ████£££  ", "  ░████£££  ",
-            "  ▒████£££  ", "  ▓████£££  ", "  █████£££  ", " ░█████£££  ", " ▒█████£££  ",
-            " ▓█████£££  ", " ██████£££  ", " ██████£££  "
-    ]},
-    "earth": Frames{ name: "earth", interval: 180, cols: 3, rows: 1,
+            "█▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁",
+            "██▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁",
+            "███▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁",
+            "████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁",
+            "██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁",
+            "██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁",
+            "███████▁▁▁▁▁▁▁▁▁▁▁▁▁",
+            "████████▁▁▁▁▁▁▁▁▁▁▁▁",
+            "█████████▁▁▁▁▁▁▁▁▁▁▁",
+            "█████████▁▁▁▁▁▁▁▁▁▁▁",
+            "██████████▁▁▁▁▁▁▁▁▁▁",
+            "███████████▁▁▁▁▁▁▁▁▁",
+            "█████████████▁▁▁▁▁▁▁",
+            "██████████████▁▁▁▁▁▁",
+            "██████████████▁▁▁▁▁▁",
+            "▁██████████████▁▁▁▁▁",
+            "▁██████████████▁▁▁▁▁",
+            "▁██████████████▁▁▁▁▁",
+            "▁▁██████████████▁▁▁▁",
+            "▁▁▁██████████████▁▁▁",
+            "▁▁▁▁█████████████▁▁▁",
+            "▁▁▁▁██████████████▁▁",
+            "▁▁▁▁██████████████▁▁",
+            "▁▁▁▁▁██████████████▁",
+            "▁▁▁▁▁██████████████▁",
+            "▁▁▁▁▁██████████████▁",
+            "▁▁▁▁▁▁██████████████",
+            "▁▁▁▁▁▁██████████████",
+            "▁▁▁▁▁▁▁█████████████",
+            "▁▁▁▁▁▁▁█████████████",
+            "▁▁▁▁▁▁▁▁████████████",
+            "▁▁▁▁▁▁▁▁████████████",
+            "▁▁▁▁▁▁▁▁▁███████████",
+            "▁▁▁▁▁▁▁▁▁███████████",
+            "▁▁▁▁▁▁▁▁▁▁██████████",
+            "▁▁▁▁▁▁▁▁▁▁██████████",
+            "▁▁▁▁▁▁▁▁▁▁▁▁████████",
+            "▁▁▁▁▁▁▁▁▁▁▁▁▁███████",
+            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████",
+            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█████",
+            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█████",
+            "█▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████",
+            "██▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███",
+            "██▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███",
+            "███▁▁▁▁▁▁▁▁▁▁▁▁▁▁███",
+            "████▁▁▁▁▁▁▁▁▁▁▁▁▁▁██",
+            "█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁█",
+            "█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁█",
+            "██████▁▁▁▁▁▁▁▁▁▁▁▁▁█",
+            "████████▁▁▁▁▁▁▁▁▁▁▁▁",
+            "█████████▁▁▁▁▁▁▁▁▁▁▁",
+            "█████████▁▁▁▁▁▁▁▁▁▁▁",
+            "█████████▁▁▁▁▁▁▁▁▁▁▁",
+            "█████████▁▁▁▁▁▁▁▁▁▁▁",
+            "███████████▁▁▁▁▁▁▁▁▁",
+            "████████████▁▁▁▁▁▁▁▁",
+            "████████████▁▁▁▁▁▁▁▁",
+            "██████████████▁▁▁▁▁▁",
+            "██████████████▁▁▁▁▁▁",
+            "▁██████████████▁▁▁▁▁",
+            "▁██████████████▁▁▁▁▁",
+            "▁▁▁█████████████▁▁▁▁",
+            "▁▁▁▁▁████████████▁▁▁",
+            "▁▁▁▁▁████████████▁▁▁",
+            "▁▁▁▁▁▁███████████▁▁▁",
+            "▁▁▁▁▁▁▁▁█████████▁▁▁",
+            "▁▁▁▁▁▁▁▁█████████▁▁▁",
+            "▁▁▁▁▁▁▁▁▁█████████▁▁",
+            "▁▁▁▁▁▁▁▁▁█████████▁▁",
+            "▁▁▁▁▁▁▁▁▁▁█████████▁",
+            "▁▁▁▁▁▁▁▁▁▁▁████████▁",
+            "▁▁▁▁▁▁▁▁▁▁▁████████▁",
+            "▁▁▁▁▁▁▁▁▁▁▁▁███████▁",
+            "▁▁▁▁▁▁▁▁▁▁▁▁███████▁",
+            "▁▁▁▁▁▁▁▁▁▁▁▁▁███████",
+            "▁▁▁▁▁▁▁▁▁▁▁▁▁███████",
+            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█████",
+            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████",
+            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████",
+            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████",
+            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███",
+            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███",
+            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██",
+            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██",
+            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██",
+            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█",
+            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█",
+            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█",
+            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁",
+            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁",
+            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁",
+            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁"
+        ]
+    },
+    "mindblown": Frames{
+        name: "mindblown",
+        interval: 160,
+        cols: 3,
+        rows: 1,
+        frames: ["😐 ", "😐 ", "😮 ", "😮 ", "😦 ", "😦 ", "😧 ", "😧 ", "🤯 ", "💥 ", "✨ ", "　 ", "　 ", "　 "]
+    },
+    "monkey": Frames{
+        name: "monkey",
+        interval: 300,
+        cols: 3,
+        rows: 1,
+        frames: ["🙈 ", "🙈 ", "🙉 ", "🙊 "]
+    },
+    "moon": Frames{
+        name: "moon",
+        interval: 80,
+        cols: 3,
+        rows: 1,
+        frames: ["🌑 ", "🌒 ", "🌓 ", "🌔 ", "🌕 ", "🌖 ", "🌗 ", "🌘 "]
+    },
+    "noise": Frames{name: "noise", interval: 100, cols: 1, rows: 1, frames: ["▓", "▒", "░"]},
+    "orangeBluePulse": Frames{
+        name: "orangeBluePulse",
+        interval: 100,
+        cols: 3,
+        rows: 1,
+        frames: ["🔸 ", "🔶 ", "🟠 ", "🟠 ", "🔶 ", "🔹 ", "🔷 ", "🔵 ", "🔵 ", "🔷 "]
+    },
+    "orangePulse": Frames{
+        name: "orangePulse",
+        interval: 100,
+        cols: 3,
+        rows: 1,
+        frames: ["🔸 ", "🔶 ", "🟠 ", "🟠 ", "🔶 "]
+    },
+    "pipe": Frames{
+        name: "pipe",
+        interval: 100,
+        cols: 1,
+        rows: 1,
+        frames: ["┤", "┘", "┴", "└", "├", "┌", "┬", "┐"]
+    },
+    "point": Frames{
+        name: "point",
+        interval: 125,
+        cols: 3,
+        rows: 1,
+        frames: ["∙∙∙", "●∙∙", "∙●∙", "∙∙●", "∙∙∙"]
+    },
+    "pong": Frames{
+        name: "pong",
+        interval: 80,
+        cols: 10,
+        rows: 1,
         frames: [
-            "🌍 ", "🌎 ", "🌏 "
-    ]},
-    "fingerDance": Frames{ name: "fingerDance", interval: 160, cols: 3, rows: 1,
+            "▐⠂       ▌",
+            "▐⠈       ▌",
+            "▐ ⠂      ▌",
+            "▐ ⠠      ▌",
+            "▐  ⡀     ▌",
+            "▐  ⠠     ▌",
+            "▐   ⠂    ▌",
+            "▐   ⠈    ▌",
+            "▐    ⠂   ▌",
+            "▐    ⠠   ▌",
+            "▐     ⡀  ▌",
+            "▐     ⠠  ▌",
+            "▐      ⠂ ▌",
+            "▐      ⠈ ▌",
+            "▐       ⠂▌",
+            "▐       ⠠▌",
+            "▐       ⡀▌",
+            "▐      ⠠ ▌",
+            "▐      ⠂ ▌",
+            "▐     ⠈  ▌",
+            "▐     ⠂  ▌",
+            "▐    ⠠   ▌",
+            "▐    ⡀   ▌",
+            "▐   ⠠    ▌",
+            "▐   ⠂    ▌",
+            "▐  ⠈     ▌",
+            "▐  ⠂     ▌",
+            "▐ ⠠      ▌",
+            "▐ ⡀      ▌",
+            "▐⠠       ▌"
+        ]
+    },
+    "rollingLine": Frames{
+        name: "rollingLine",
+        interval: 80,
+        cols: 3,
+        rows: 1,
+        frames: ["/  ", " - ", " \\ ", "  |", "  |", " \\ ", " - ", "/  "]
+    },
+    "runner": Frames{name: "runner", interval: 140, cols: 3, rows: 1, frames: ["🚶 ", "🏃 "]},
+    "sand": Frames{
+        name: "sand",
+        interval: 80,
+        cols: 1,
+        rows: 1,
         frames: [
-            "🤘 ", "🤟 ", "🖖 ", "✋ ", "🤚 ", "👆 "
-    ]},
-    "fish": Frames{ name: "fish", interval: 80, cols: 20, rows: 1,
-        frames: [
-            "~~~~~~~~~~~~~~~~~~~~", "> ~~~~~~~~~~~~~~~~~~", "º> ~~~~~~~~~~~~~~~~~",
-            "(º> ~~~~~~~~~~~~~~~~", "((º> ~~~~~~~~~~~~~~~", "<((º> ~~~~~~~~~~~~~~",
-            "><((º> ~~~~~~~~~~~~~", " ><((º> ~~~~~~~~~~~~", "~ ><((º> ~~~~~~~~~~~",
-            "~~ <>((º> ~~~~~~~~~~", "~~~ ><((º> ~~~~~~~~~", "~~~~ <>((º> ~~~~~~~~",
-            "~~~~~ ><((º> ~~~~~~~", "~~~~~~ <>((º> ~~~~~~", "~~~~~~~ ><((º> ~~~~~",
-            "~~~~~~~~ <>((º> ~~~~", "~~~~~~~~~ ><((º> ~~~", "~~~~~~~~~~ <>((º> ~~",
-            "~~~~~~~~~~~ ><((º> ~", "~~~~~~~~~~~~ <>((º> ", "~~~~~~~~~~~~~ ><((º>",
-            "~~~~~~~~~~~~~~ <>((º", "~~~~~~~~~~~~~~~ ><((", "~~~~~~~~~~~~~~~~ <>(",
-            "~~~~~~~~~~~~~~~~~ ><", "~~~~~~~~~~~~~~~~~~ <", "~~~~~~~~~~~~~~~~~~~~"
-    ]},
-    "fistBump": Frames{ name: "fistBump", interval: 80, cols: 13, rows: 1,
-        frames: [
-            "🤜　　　　🤛 ", "🤜　　　　🤛 ", "🤜　　　　🤛 ", "　🤜　　🤛　 ", "　　🤜🤛　　 ", "　🤜✨🤛　　 ", "🤜　✨　🤛　 "
-    ]},
-    "flip": Frames{ name: "flip", interval: 70, cols: 1, rows: 1,
-        frames: [
-            "_", "_", "_", "-", "`", "`", "'", "´", "-", "_", "_", "_"
-    ]},
-    "grenade": Frames{ name: "grenade", interval: 80, cols: 3, rows: 1,
-        frames: [
-            "،  ", "′  ", " ´ ", " ‾ ", "  ⸌", "  ⸊", "  |", "  ⁎", "  ⁕", " ෴ ", "  ⁓", "   ",
-            "   ", "   "
-    ]},
-    "growHorizontal": Frames{ name: "growHorizontal", interval: 120, cols: 1, rows: 1,
-        frames: [
-            "▏", "▎", "▍", "▌", "▋", "▊", "▉", "▊", "▋", "▌", "▍", "▎"
-    ]},
-    "growVertical": Frames{ name: "growVertical", interval: 120, cols: 1, rows: 1,
-        frames: [
-            "▁", "▃", "▄", "▅", "▆", "▇", "▆", "▅", "▄", "▃"
-    ]},
-    "hamburger": Frames{ name: "hamburger", interval: 100, cols: 2, rows: 1,
-        frames: [
-            "☱", "☲", "☴"
-    ]},
-    "hearts": Frames{ name: "hearts", interval: 100, cols: 3, rows: 1,
-        frames: [
-            "💛 ", "💙 ", "💜 ", "💚 ", "💗 "
-    ]},
-    "layer": Frames{ name: "layer", interval: 150, cols: 1, rows: 1,
-        frames: [
-            "-", "=", "≡"
-    ]},
-    "line": Frames{ name: "line", interval: 130, cols: 1, rows: 1,
-        frames: [
-            "-", "\\", "|", "/"
-    ]},
-    "line2": Frames{ name: "line2", interval: 100, cols: 1, rows: 1,
-        frames: [
-            "⠂", "-", "–", "—", "–", "-"
-    ]},
-    "material": Frames{ name: "material", interval: 17, cols: 20, rows: 1,
-        frames: [
-            "█▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁", "██▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁", "███▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁",
-            "████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁", "██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁", "██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁",
-            "███████▁▁▁▁▁▁▁▁▁▁▁▁▁", "████████▁▁▁▁▁▁▁▁▁▁▁▁", "█████████▁▁▁▁▁▁▁▁▁▁▁",
-            "█████████▁▁▁▁▁▁▁▁▁▁▁", "██████████▁▁▁▁▁▁▁▁▁▁", "███████████▁▁▁▁▁▁▁▁▁",
-            "█████████████▁▁▁▁▁▁▁", "██████████████▁▁▁▁▁▁", "██████████████▁▁▁▁▁▁",
-            "▁██████████████▁▁▁▁▁", "▁██████████████▁▁▁▁▁", "▁██████████████▁▁▁▁▁",
-            "▁▁██████████████▁▁▁▁", "▁▁▁██████████████▁▁▁", "▁▁▁▁█████████████▁▁▁",
-            "▁▁▁▁██████████████▁▁", "▁▁▁▁██████████████▁▁", "▁▁▁▁▁██████████████▁",
-            "▁▁▁▁▁██████████████▁", "▁▁▁▁▁██████████████▁", "▁▁▁▁▁▁██████████████",
-            "▁▁▁▁▁▁██████████████", "▁▁▁▁▁▁▁█████████████", "▁▁▁▁▁▁▁█████████████",
-            "▁▁▁▁▁▁▁▁████████████", "▁▁▁▁▁▁▁▁████████████", "▁▁▁▁▁▁▁▁▁███████████",
-            "▁▁▁▁▁▁▁▁▁███████████", "▁▁▁▁▁▁▁▁▁▁██████████", "▁▁▁▁▁▁▁▁▁▁██████████",
-            "▁▁▁▁▁▁▁▁▁▁▁▁████████", "▁▁▁▁▁▁▁▁▁▁▁▁▁███████", "▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████",
-            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█████", "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█████", "█▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████",
-            "██▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███", "██▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███", "███▁▁▁▁▁▁▁▁▁▁▁▁▁▁███",
-            "████▁▁▁▁▁▁▁▁▁▁▁▁▁▁██", "█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁█", "█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁█",
-            "██████▁▁▁▁▁▁▁▁▁▁▁▁▁█", "████████▁▁▁▁▁▁▁▁▁▁▁▁", "█████████▁▁▁▁▁▁▁▁▁▁▁",
-            "█████████▁▁▁▁▁▁▁▁▁▁▁", "█████████▁▁▁▁▁▁▁▁▁▁▁", "█████████▁▁▁▁▁▁▁▁▁▁▁",
-            "███████████▁▁▁▁▁▁▁▁▁", "████████████▁▁▁▁▁▁▁▁", "████████████▁▁▁▁▁▁▁▁",
-            "██████████████▁▁▁▁▁▁", "██████████████▁▁▁▁▁▁", "▁██████████████▁▁▁▁▁",
-            "▁██████████████▁▁▁▁▁", "▁▁▁█████████████▁▁▁▁", "▁▁▁▁▁████████████▁▁▁",
-            "▁▁▁▁▁████████████▁▁▁", "▁▁▁▁▁▁███████████▁▁▁", "▁▁▁▁▁▁▁▁█████████▁▁▁",
-            "▁▁▁▁▁▁▁▁█████████▁▁▁", "▁▁▁▁▁▁▁▁▁█████████▁▁", "▁▁▁▁▁▁▁▁▁█████████▁▁",
-            "▁▁▁▁▁▁▁▁▁▁█████████▁", "▁▁▁▁▁▁▁▁▁▁▁████████▁", "▁▁▁▁▁▁▁▁▁▁▁████████▁",
-            "▁▁▁▁▁▁▁▁▁▁▁▁███████▁", "▁▁▁▁▁▁▁▁▁▁▁▁███████▁", "▁▁▁▁▁▁▁▁▁▁▁▁▁███████",
-            "▁▁▁▁▁▁▁▁▁▁▁▁▁███████", "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█████", "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████",
-            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████", "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████", "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███",
-            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███", "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██", "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██",
-            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██", "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█", "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█",
-            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█", "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁", "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁",
-            "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁", "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁"
-    ]},
-    "mindblown": Frames{ name: "mindblown", interval: 160, cols: 3, rows: 1,
-        frames: [
-            "😐 ", "😐 ", "😮 ", "😮 ", "😦 ", "😦 ", "😧 ", "😧 ", "🤯 ", "💥 ", "✨ ", "　 ", "　 ", "　 "
-    ]},
-    "monkey": Frames{ name: "monkey", interval: 300, cols: 3, rows: 1,
-        frames: [
-            "🙈 ", "🙈 ", "🙉 ", "🙊 "
-    ]},
-    "moon": Frames{ name: "moon", interval: 80, cols: 3, rows: 1,
-        frames: [
-            "🌑 ", "🌒 ", "🌓 ", "🌔 ", "🌕 ", "🌖 ", "🌗 ", "🌘 "
-    ]},
-    "noise": Frames{ name: "noise", interval: 100, cols: 1, rows: 1,
-        frames: [
-            "▓", "▒", "░"
-    ]},
-    "orangeBluePulse": Frames{ name: "orangeBluePulse", interval: 100, cols: 3, rows: 1,
-        frames: [
-            "🔸 ", "🔶 ", "🟠 ", "🟠 ", "🔶 ", "🔹 ", "🔷 ", "🔵 ", "🔵 ", "🔷 "
-    ]},
-    "orangePulse": Frames{ name: "orangePulse", interval: 100, cols: 3, rows: 1,
-        frames: [
-            "🔸 ", "🔶 ", "🟠 ", "🟠 ", "🔶 "
-    ]},
-    "pipe": Frames{ name: "pipe", interval: 100, cols: 1, rows: 1,
-        frames: [
-            "┤", "┘", "┴", "└", "├", "┌", "┬", "┐"
-    ]},
-    "point": Frames{ name: "point", interval: 125, cols: 3, rows: 1,
-        frames: [
-            "∙∙∙", "●∙∙", "∙●∙", "∙∙●", "∙∙∙"
-    ]},
-    "pong": Frames{ name: "pong", interval: 80, cols: 10, rows: 1,
-        frames: [
-            "▐⠂       ▌", "▐⠈       ▌", "▐ ⠂      ▌", "▐ ⠠      ▌", "▐  ⡀     ▌", "▐  ⠠     ▌",
-            "▐   ⠂    ▌", "▐   ⠈    ▌", "▐    ⠂   ▌", "▐    ⠠   ▌", "▐     ⡀  ▌", "▐     ⠠  ▌",
-            "▐      ⠂ ▌", "▐      ⠈ ▌", "▐       ⠂▌", "▐       ⠠▌", "▐       ⡀▌", "▐      ⠠ ▌",
-            "▐      ⠂ ▌", "▐     ⠈  ▌", "▐     ⠂  ▌", "▐    ⠠   ▌", "▐    ⡀   ▌", "▐   ⠠    ▌",
-            "▐   ⠂    ▌", "▐  ⠈     ▌", "▐  ⠂     ▌", "▐ ⠠      ▌", "▐ ⡀      ▌", "▐⠠       ▌"
-    ]},
-    "rollingLine": Frames{ name: "rollingLine", interval: 80, cols: 3, rows: 1,
-        frames: [
-            "/  ", " - ", " \\ ", "  |", "  |", " \\ ", " - ", "/  "
-    ]},
-    "runner": Frames{ name: "runner", interval: 140, cols: 3, rows: 1,
-        frames: [
-            "🚶 ", "🏃 "
-    ]},
-    "sand": Frames{ name: "sand", interval: 80, cols: 1, rows: 1,
-        frames: [
-            "⠁", "⠂", "⠄", "⡀", "⡈", "⡐", "⡠", "⣀", "⣁", "⣂", "⣄", "⣌", "⣔", "⣤", "⣥", "⣦", "⣮",
-            "⣶", "⣷", "⣿", "⡿", "⠿", "⢟", "⠟", "⡛", "⠛", "⠫", "⢋", "⠋", "⠍", "⡉", "⠉", "⠑", "⠡",
+            "⠁",
+            "⠂",
+            "⠄",
+            "⡀",
+            "⡈",
+            "⡐",
+            "⡠",
+            "⣀",
+            "⣁",
+            "⣂",
+            "⣄",
+            "⣌",
+            "⣔",
+            "⣤",
+            "⣥",
+            "⣦",
+            "⣮",
+            "⣶",
+            "⣷",
+            "⣿",
+            "⡿",
+            "⠿",
+            "⢟",
+            "⠟",
+            "⡛",
+            "⠛",
+            "⠫",
+            "⢋",
+            "⠋",
+            "⠍",
+            "⡉",
+            "⠉",
+            "⠑",
+            "⠡",
             "⢁"
-    ]},
-    "shark": Frames{ name: "shark", interval: 120, cols: 16, rows: 1,
+        ]
+    },
+    "shark": Frames{
+        name: "shark",
+        interval: 120,
+        cols: 16,
+        rows: 1,
         frames: [
-            "▐|\\____________▌", "▐_|\\___________▌", "▐__|\\__________▌", "▐___|\\_________▌",
-            "▐____|\\________▌", "▐_____|\\_______▌", "▐______|\\______▌", "▐_______|\\_____▌",
-            "▐________|\\____▌", "▐_________|\\___▌", "▐__________|\\__▌", "▐___________|\\_▌",
-            "▐____________|\\▌", "▐____________/|▌", "▐___________/|_▌", "▐__________/|__▌",
-            "▐_________/|___▌", "▐________/|____▌", "▐_______/|_____▌", "▐______/|______▌",
-            "▐_____/|_______▌", "▐____/|________▌", "▐___/|_________▌", "▐__/|__________▌",
-            "▐_/|___________▌", "▐/|____________▌"
-    ]},
-    "simpleDots": Frames{ name: "simpleDots", interval: 400, cols: 3, rows: 1,
+            "▐|\\____________▌",
+            "▐_|\\___________▌",
+            "▐__|\\__________▌",
+            "▐___|\\_________▌",
+            "▐____|\\________▌",
+            "▐_____|\\_______▌",
+            "▐______|\\______▌",
+            "▐_______|\\_____▌",
+            "▐________|\\____▌",
+            "▐_________|\\___▌",
+            "▐__________|\\__▌",
+            "▐___________|\\_▌",
+            "▐____________|\\▌",
+            "▐____________/|▌",
+            "▐___________/|_▌",
+            "▐__________/|__▌",
+            "▐_________/|___▌",
+            "▐________/|____▌",
+            "▐_______/|_____▌",
+            "▐______/|______▌",
+            "▐_____/|_______▌",
+            "▐____/|________▌",
+            "▐___/|_________▌",
+            "▐__/|__________▌",
+            "▐_/|___________▌",
+            "▐/|____________▌"
+        ]
+    },
+    "simpleDots": Frames{
+        name: "simpleDots",
+        interval: 400,
+        cols: 3,
+        rows: 1,
+        frames: [".  ", ".. ", "...", "   "]
+    },
+    "simpleDotsScrolling": Frames{
+        name: "simpleDotsScrolling",
+        interval: 200,
+        cols: 3,
+        rows: 1,
+        frames: [".  ", ".. ", "...", " ..", "  .", "   "]
+    },
+    "smiley": Frames{name: "smiley", interval: 200, cols: 3, rows: 1, frames: ["😄 ", "😝 "]},
+    "soccerHeader": Frames{
+        name: "soccerHeader",
+        interval: 80,
+        cols: 15,
+        rows: 1,
         frames: [
-            ".  ", ".. ", "...", "   "
-    ]},
-    "simpleDotsScrolling": Frames{ name: "simpleDotsScrolling", interval: 200, cols: 3, rows: 1,
-        frames: [
-            ".  ", ".. ", "...", " ..", "  .", "   "
-    ]},
-    "smiley": Frames{ name: "smiley", interval: 200, cols: 3, rows: 1,
-        frames: [
-            "😄 ", "😝 "
-    ]},
-    "soccerHeader": Frames{ name: "soccerHeader", interval: 80, cols: 15, rows: 1,
-        frames: [
-            " 🧑⚽️       🧑 ", "🧑  ⚽️      🧑 ", "🧑   ⚽️     🧑 ", "🧑    ⚽️    🧑 ", "🧑     ⚽️   🧑 ",
-            "🧑      ⚽️  🧑 ", "🧑       ⚽️🧑  ", "🧑      ⚽️  🧑 ", "🧑     ⚽️   🧑 ", "🧑    ⚽️    🧑 ",
-            "🧑   ⚽️     🧑 ", "🧑  ⚽️      🧑 "
-    ]},
-    "soccerVertical": Frames{ name: "soccerVertical", interval: 80, cols: 2, rows: 12,
+            " 🧑⚽️       🧑 ",
+            "🧑  ⚽️      🧑 ",
+            "🧑   ⚽️     🧑 ",
+            "🧑    ⚽️    🧑 ",
+            "🧑     ⚽️   🧑 ",
+            "🧑      ⚽️  🧑 ",
+            "🧑       ⚽️🧑  ",
+            "🧑      ⚽️  🧑 ",
+            "🧑     ⚽️   🧑 ",
+            "🧑    ⚽️    🧑 ",
+            "🧑   ⚽️     🧑 ",
+            "🧑  ⚽️      🧑 "
+        ]
+    },
+    "soccerVertical": Frames{
+        name: "soccerVertical",
+        interval: 80,
+        cols: 2,
+        rows: 12,
         frames: [
             "  \n🧑\n⚽️\n  \n  \n  \n  \n  \n  \n  \n🧑\n  ",
             "🧑\n  \n  \n⚽️\n  \n  \n  \n  \n  \n  \n🧑\n  ",
@@ -452,97 +1326,100 @@ def const CATALOGUE as map of string to Frames init {
             "🧑\n  \n  \n  \n  \n⚽️\n  \n  \n  \n  \n🧑\n  ",
             "🧑\n  \n  \n  \n⚽️\n  \n  \n  \n  \n  \n🧑\n  ",
             "🧑\n  \n  \n⚽️\n  \n  \n  \n  \n  \n  \n🧑\n  "
-    ]},
-    "speaker": Frames{ name: "speaker", interval: 160, cols: 3, rows: 1,
+        ]
+    },
+    "speaker": Frames{
+        name: "speaker",
+        interval: 160,
+        cols: 3,
+        rows: 1,
+        frames: ["🔈 ", "🔉 ", "🔊 ", "🔉 "]
+    },
+    "squareCorners": Frames{
+        name: "squareCorners",
+        interval: 180,
+        cols: 1,
+        rows: 1,
+        frames: ["◰", "◳", "◲", "◱"]
+    },
+    "squish": Frames{name: "squish", interval: 100, cols: 1, rows: 1, frames: ["╫", "╪"]},
+    "star": Frames{
+        name: "star",
+        interval: 70,
+        cols: 1,
+        rows: 1,
+        frames: ["✶", "✸", "✹", "✺", "✹", "✷"]
+    },
+    "star2": Frames{name: "star2", interval: 80, cols: 1, rows: 1, frames: ["+", "x", "*"]},
+    "timeTravel": Frames{
+        name: "timeTravel",
+        interval: 100,
+        cols: 3,
+        rows: 1,
+        frames: ["🕛 ", "🕚 ", "🕙 ", "🕘 ", "🕗 ", "🕖 ", "🕕 ", "🕔 ", "🕓 ", "🕒 ", "🕑 ", "🕐 "]
+    },
+    "toggle": Frames{name: "toggle", interval: 250, cols: 1, rows: 1, frames: ["⊶", "⊷"]},
+    "toggle10": Frames{name: "toggle10", interval: 100, cols: 2, rows: 1, frames: ["㊂", "㊀", "㊁"]},
+    "toggle11": Frames{name: "toggle11", interval: 50, cols: 1, rows: 1, frames: ["⧇", "⧆"]},
+    "toggle12": Frames{name: "toggle12", interval: 120, cols: 1, rows: 1, frames: ["☗", "☖"]},
+    "toggle13": Frames{name: "toggle13", interval: 80, cols: 1, rows: 1, frames: ["=", "*", "-"]},
+    "toggle2": Frames{name: "toggle2", interval: 80, cols: 1, rows: 1, frames: ["▫", "▪"]},
+    "toggle3": Frames{name: "toggle3", interval: 120, cols: 1, rows: 1, frames: ["□", "■"]},
+    "toggle4": Frames{
+        name: "toggle4",
+        interval: 100,
+        cols: 1,
+        rows: 1,
+        frames: ["■", "□", "▪", "▫"]
+    },
+    "toggle5": Frames{name: "toggle5", interval: 100, cols: 1, rows: 1, frames: ["▮", "▯"]},
+    "toggle6": Frames{name: "toggle6", interval: 300, cols: 1, rows: 1, frames: ["ဝ", "၀"]},
+    "toggle7": Frames{name: "toggle7", interval: 80, cols: 1, rows: 1, frames: ["⦾", "⦿"]},
+    "toggle8": Frames{name: "toggle8", interval: 100, cols: 1, rows: 1, frames: ["◍", "◌"]},
+    "toggle9": Frames{name: "toggle9", interval: 100, cols: 1, rows: 1, frames: ["◉", "◎"]},
+    "triangle": Frames{
+        name: "triangle",
+        interval: 50,
+        cols: 1,
+        rows: 1,
+        frames: ["◢", "◣", "◤", "◥"]
+    },
+    "weather": Frames{
+        name: "weather",
+        interval: 100,
+        cols: 3,
+        rows: 1,
         frames: [
-            "🔈 ", "🔉 ", "🔊 ", "🔉 "
-    ]},
-    "squareCorners": Frames{ name: "squareCorners", interval: 180, cols: 1, rows: 1,
-        frames: [
-            "◰", "◳", "◲", "◱"
-    ]},
-    "squish": Frames{ name: "squish", interval: 100, cols: 1, rows: 1,
-        frames: [
-            "╫", "╪"
-    ]},
-    "star": Frames{ name: "star", interval: 70, cols: 1, rows: 1,
-        frames: [
-            "✶", "✸", "✹", "✺", "✹", "✷"
-    ]},
-    "star2": Frames{ name: "star2", interval: 80, cols: 1, rows: 1,
-        frames: [
-            "+", "x", "*"
-    ]},
-    "timeTravel": Frames{ name: "timeTravel", interval: 100, cols: 3, rows: 1,
-        frames: [
-            "🕛 ", "🕚 ", "🕙 ", "🕘 ", "🕗 ", "🕖 ", "🕕 ", "🕔 ", "🕓 ", "🕒 ", "🕑 ", "🕐 "
-    ]},
-    "toggle": Frames{ name: "toggle", interval: 250, cols: 1, rows: 1,
-        frames: [
-            "⊶", "⊷"
-    ]},
-    "toggle10": Frames{ name: "toggle10", interval: 100, cols: 2, rows: 1,
-        frames: [
-            "㊂", "㊀", "㊁"
-    ]},
-    "toggle11": Frames{ name: "toggle11", interval: 50, cols: 1, rows: 1,
-        frames: [
-            "⧇", "⧆"
-    ]},
-    "toggle12": Frames{ name: "toggle12", interval: 120, cols: 1, rows: 1,
-        frames: [
-            "☗", "☖"
-    ]},
-    "toggle13": Frames{ name: "toggle13", interval: 80, cols: 1, rows: 1,
-        frames: [
-            "=", "*", "-"
-    ]},
-    "toggle2": Frames{ name: "toggle2", interval: 80, cols: 1, rows: 1,
-        frames: [
-            "▫", "▪"
-    ]},
-    "toggle3": Frames{ name: "toggle3", interval: 120, cols: 1, rows: 1,
-        frames: [
-            "□", "■"
-    ]},
-    "toggle4": Frames{ name: "toggle4", interval: 100, cols: 1, rows: 1,
-        frames: [
-            "■", "□", "▪", "▫"
-    ]},
-    "toggle5": Frames{ name: "toggle5", interval: 100, cols: 1, rows: 1,
-        frames: [
-            "▮", "▯"
-    ]},
-    "toggle6": Frames{ name: "toggle6", interval: 300, cols: 1, rows: 1,
-        frames: [
-            "ဝ", "၀"
-    ]},
-    "toggle7": Frames{ name: "toggle7", interval: 80, cols: 1, rows: 1,
-        frames: [
-            "⦾", "⦿"
-    ]},
-    "toggle8": Frames{ name: "toggle8", interval: 100, cols: 1, rows: 1,
-        frames: [
-            "◍", "◌"
-    ]},
-    "toggle9": Frames{ name: "toggle9", interval: 100, cols: 1, rows: 1,
-        frames: [
-            "◉", "◎"
-    ]},
-    "triangle": Frames{ name: "triangle", interval: 50, cols: 1, rows: 1,
-        frames: [
-            "◢", "◣", "◤", "◥"
-    ]},
-    "weather": Frames{ name: "weather", interval: 100, cols: 3, rows: 1,
-        frames: [
-            "☀️ ", "☀️ ", "☀️ ", "🌤 ", "⛅️ ", "🌥 ", "☁️ ", "🌧 ", "🌨 ", "🌧 ", "🌨 ", "🌧 ", "🌨 ",
-            "⛈  ", "🌨 ", "🌧 ", "🌨 ", "☁️ ", "🌥 ", "⛅️ ", "🌤 ", "☀️ ", "☀️ "
-    ]}
+            "☀️ ",
+            "☀️ ",
+            "☀️ ",
+            "🌤 ",
+            "⛅️ ",
+            "🌥 ",
+            "☁️ ",
+            "🌧 ",
+            "🌨 ",
+            "🌧 ",
+            "🌨 ",
+            "🌧 ",
+            "🌨 ",
+            "⛈  ",
+            "🌨 ",
+            "🌧 ",
+            "🌨 ",
+            "☁️ ",
+            "🌥 ",
+            "⛅️ ",
+            "🌤 ",
+            "☀️ ",
+            "☀️ "
+        ]
+    }
 };
 
 /**
- * List every spinner name in the catalogue, sorted.
- * @return {list of string} the names
+ * Every catalogue name.
+ * @return {list of string} names, sorted
  */
 export func names() {
     def out as list of string init maps.keys(CATALOGUE);
@@ -550,19 +1427,18 @@ export func names() {
 }
 
 /**
- * Report whether the catalogue has a spinner by this name.
- * @param name {string} the name to look for
- * @return {bool} true when `get` will return that spinner rather than the default
+ * Whether the catalogue has this name.
+ * @param name {string} name to look up
+ * @return {bool} true when `get` returns that animation, not the default
  */
 export func has(name as string) {
     return maps.has(CATALOGUE, $name);
 }
 
 /**
- * Look a spinner up by name, falling back to the default rather than throwing,
- * so a caller can pass user input straight through.
- * @param name {string} the catalogue name
- * @return {Frames} the named spinner, or the default when the name is unknown
+ * Look an animation up by name. Never throws, so user input can be passed in.
+ * @param name {string} catalogue name
+ * @return {Frames} the animation, or `DEFAULT_NAME`'s when unknown
  */
 export func get(name as string) {
     if (maps.has(CATALOGUE, $name)) {
