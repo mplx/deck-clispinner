@@ -1,9 +1,10 @@
 #!/usr/bin/env -S jennifer run
 # SPDX-License-Identifier: MIT
-# Copyright (C) 2026 mplx <developer@mplx.eu>
+# Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
+# pragma-jennifer-version: >=0.25.0
 #
-# A hand-run demonstration of the deck. This is not part of the deck: only
-# `src/` is vendored into a consumer, so a demo script lives at the root.
+# Hand-run demo; needs a terminal. It lives outside `src/`, so it is never
+# vendored.
 #
 #     ./demo.j            the tour
 #     ./demo.j multiline  the multi-row spinner and its status block
@@ -44,20 +45,19 @@ func tour() {
 }
 
 func multiline() {
-    # soccerVertical is 2 columns by 12 rows, so the status has twelve rows to
-    # fill beside it. Everything past the twelfth is cut, not wrapped on into
-    # the terminal, because the erase only knows how to undo twelve rows.
+    # soccerVertical is 2 columns by 12 rows, so the status gets twelve rows.
+    # Text past the twelfth is cut: the erase only undoes twelve rows.
     io.printf("a line printed before the spinner, which must survive\n");
 
-    def o as spinner.Options init spinner.options("soccerVertical",
+    def o as spinner.Options init spinner.options(
+        "soccerVertical",
         "a status message with room to breathe");
     $o.stream = spinner.STDOUT;
     def sp as spinner.Spinner init spinner.startSpinner($o);
     pause(1600);
 
     # Explicit line breaks, honoured up to the spinner's height.
-    $sp = spinner.statusSpinner($sp,
-        "resolving\n  @acme/alpha\n  @acme/beta\n  @acme/gamma");
+    $sp = spinner.statusSpinner($sp, "resolving\n  @acme/alpha\n  @acme/beta\n  @acme/gamma");
     pause(1600);
 
     # Far more text than twelve short rows can hold: it is hard cut.

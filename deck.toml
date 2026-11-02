@@ -3,7 +3,7 @@ name = "@mplx/clispinner"
 version = "0.1.0"
 description = "a terminal spinner that animates on its own goroutine"
 license = "MIT"
-authors = ["mplx <developer@mplx.eu>"]
+authors = ["mplx <mplx@jennifer-lang.dev>"]
 keywords = ["spinner", "terminal", "cli", "progress"]
 
 # A deck, not an app: a scoped name and no `bin`. It is imported and vendored
@@ -32,6 +32,3 @@ jennifer = ">=0.25.0"
 # time, task, channel, convert, strings, lists, maps), so it has none.
 [decks]
 
-# What this deck provides: capability = concrete version.
-[provides]
-spinner = "0.1.0"
