@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
-# Copyright (C) 2026 mplx <developer@mplx.eu>
+# Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
+# pragma-jennifer-version: >=0.25.0
 #
 # White-box tests for clispinner.j: the spinner API and its animating task.
 # Run with:
@@ -122,8 +123,11 @@ func testRenderBlockKeepsTheLineInsideTheTerminal() {
     # beside it needs 59. In a 40-column terminal that spills onto a second row,
     # and the next erase only clears the row the cursor is on.
     def spec as frames.Frames init frames.get("material");
-    def line as string init renderBlock($spec.frames[0],
-        "a status message long enough to matter", $spec.cols, 40);
+    def line as string init renderBlock(
+        $spec.frames[0],
+        "a status message long enough to matter",
+        $spec.cols,
+        40);
     testing.assertTrue(len($line) <= 40);
     testing.assertEqual(len(frameRows($line)), 1);
 }
@@ -137,9 +141,7 @@ func testRenderBlockNeverCutsTheFrame() {
 
 func testRenderBlockDropsAStatusWithNoRoom() {
     def spec as frames.Frames init frames.get("material");
-    testing.assertEqual(
-        renderBlock($spec.frames[0], "status", $spec.cols, 21),
-        $spec.frames[0]);
+    testing.assertEqual(renderBlock($spec.frames[0], "status", $spec.cols, 21), $spec.frames[0]);
 }
 
 func testRenderBlockPutsTheStatusBesideTheFirstRow() {
@@ -223,8 +225,11 @@ func testNoRowIsWrittenToTheLastColumn() {
     # state, and terminals disagree about what the next newline does. One spare
     # column removes the disagreement.
     def spec as frames.Frames init frames.get("material");
-    def block as string init renderBlock($spec.frames[0],
-        "a status message long enough to be cut", $spec.cols, 40);
+    def block as string init renderBlock(
+        $spec.frames[0],
+        "a status message long enough to be cut",
+        $spec.cols,
+        40);
     for (def row in frameRows($block)) {
         testing.assertTrue(len($row) <= 39);
     }
@@ -280,8 +285,11 @@ func testATallSpinnerIsClippedToWhatTheWindowHolds() {
     # cursor-up erase and stranding the block on screen.
     def spec as frames.Frames init frames.get("soccerVertical");
     def fits as int init 5;
-    def block as string init renderBlock(clipFrame($spec.frames[0], $fits),
-        "status", $spec.cols, 40);
+    def block as string init renderBlock(
+        clipFrame($spec.frames[0], $fits),
+        "status",
+        $spec.cols,
+        40);
     testing.assertEqual(len(frameRows($block)), $fits);
 }
 
@@ -411,8 +419,9 @@ func testAdvanceCountsOnlyDrawnFrames() {
 func testAStatusCommandChangesOnlyTheText() {
     def st as State init newState(resolveOptions(options("line", "before")));
     $st = advance($st, true);
-    def after as State init applyCommand($st,
-        Command{ kind: CMD_STATUS, text: "after", options: $st.options });
+    def after as State init applyCommand(
+        $st,
+        Command{kind: CMD_STATUS, text: "after", options: $st.options});
     testing.assertEqual($after.status, "after");
     testing.assertEqual($after.index, $st.index);
     testing.assertEqual($after.options.name, "line");
@@ -423,8 +432,7 @@ func testAnUpdateCommandRestartsTheAnimation() {
     $st = advance($st, true);
     $st = advance($st, true);
     def next as Options init resolveOptions(options("bouncingBar", "two"));
-    def after as State init applyCommand($st,
-        Command{ kind: CMD_UPDATE, text: "", options: $next });
+    def after as State init applyCommand($st, Command{kind: CMD_UPDATE, text: "", options: $next});
     testing.assertEqual($after.options.name, "bouncingBar");
     testing.assertEqual($after.spec.name, "bouncingBar");
     testing.assertEqual($after.status, "two");
@@ -434,16 +442,18 @@ func testAnUpdateCommandRestartsTheAnimation() {
 func testAStopCommandOnlySetsTheFlag() {
     def st as State init newState(resolveOptions(options("line", "x")));
     $st = advance($st, true);
-    def after as State init applyCommand($st,
-        Command{ kind: CMD_STOP, text: "", options: $st.options });
+    def after as State init applyCommand(
+        $st,
+        Command{kind: CMD_STOP, text: "", options: $st.options});
     testing.assertTrue($after.stopped);
     testing.assertEqual($after.drawn, $st.drawn);
 }
 
 func testAnUnknownCommandIsIgnored() {
     def st as State init newState(resolveOptions(options("line", "x")));
-    def after as State init applyCommand($st,
-        Command{ kind: "nonsense", text: "ignored", options: $st.options });
+    def after as State init applyCommand(
+        $st,
+        Command{kind: "nonsense", text: "ignored", options: $st.options});
     testing.assertEqual($after.status, "x");
     testing.assertFalse($after.stopped);
 }
@@ -502,8 +512,7 @@ func testRemoveClosesTheCommandChannel() {
 func sendAfterRemove() {
     def sp as Spinner init startSpinner(options("dots", ""));
     removeSpinner($sp);
-    channel.send($sp.commands, Command{
-        kind: CMD_STATUS, text: "too late", options: $sp.options });
+    channel.send($sp.commands, Command{kind: CMD_STATUS, text: "too late", options: $sp.options});
 }
 
 func testManySpinnersRunIndependently() {
@@ -518,4 +527,28 @@ func testManySpinnersRunIndependently() {
 
 func testSpinnerNamesComeFromTheCatalogue() {
     testing.assertEqual(len(spinnerNames()), len(frames.names()));
+}
+
+func testDrawableIsFalseOffATerminal() {
+    # The suite runs off a terminal, which is what keeps every other test here
+    # from writing control characters.
+    testing.assertFalse(drawable(STDERR));
+}
+
+func testFinishSpinnerReportsTheFramesDrawn() {
+    # An empty mark and message leave nothing to print, so this writes nothing.
+    def sp as Spinner init startSpinner(options("dots", "working"));
+    testing.assertEqual(finishSpinner($sp, "", ""), 0);
+}
+
+func testFinishSpinnerStopsTheSpinner() {
+    testing.assertThrows("sendAfterFinish", "runtime");
+}
+
+# sendAfterFinish is the throwing call testFinishSpinnerStopsTheSpinner asserts
+# on: finishSpinner removes the spinner, which closes its command channel.
+func sendAfterFinish() {
+    def sp as Spinner init startSpinner(options("dots", ""));
+    finishSpinner($sp, "", "");
+    channel.send($sp.commands, Command{kind: CMD_STATUS, text: "too late", options: $sp.options});
 }

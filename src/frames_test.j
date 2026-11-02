@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
-# Copyright (C) 2026 mplx <developer@mplx.eu>
+# Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
+# pragma-jennifer-version: >=0.25.0
 #
 # White-box tests for frames.j: the spinner catalogue.
 # Run with:
