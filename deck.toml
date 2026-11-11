@@ -25,7 +25,7 @@ homepage = "https://github.com/mplx/deck-clispinner"
 # guarded and falls back to 80 columns, and `os.isTerminal` reports false there
 # anyway, which the spinner already treats as "draw nothing".
 [engines]
-jennifer = ">=0.25.0"
+jennifer = ">=0.26.0"
 
 # Runtime requirements: deck = version constraint. Registry decks only, and they
 # MUST be scoped. This deck uses nothing but bundled stdlib modules (io, os,
