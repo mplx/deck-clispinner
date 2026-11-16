@@ -503,7 +503,7 @@ func testStatusLeavesTheHandleAlone() {
 }
 
 func testRemoveClosesTheCommandChannel() {
-    testing.assertThrows("sendAfterRemove", "runtime");
+    testing.assertThrows("sendAfterRemove", "closed");
 }
 
 # sendAfterRemove is the throwing call testRemoveClosesTheCommandChannel asserts
@@ -542,7 +542,7 @@ func testFinishSpinnerReportsTheFramesDrawn() {
 }
 
 func testFinishSpinnerStopsTheSpinner() {
-    testing.assertThrows("sendAfterFinish", "runtime");
+    testing.assertThrows("sendAfterFinish", "closed");
 }
 
 # sendAfterFinish is the throwing call testFinishSpinnerStopsTheSpinner asserts

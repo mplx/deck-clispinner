@@ -590,7 +590,7 @@ export func startSpinner(opts as Options) {
  * @param sp {Spinner} running spinner
  * @param opts {Options} complete new options, not a partial update
  * @return {Spinner} handle with `options` updated; use it from now on
- * @throws {Error} kind "runtime" when the spinner was already removed
+ * @throws {Error} kind "closed" when the spinner was already removed
  */
 export func updateSpinner(sp as Spinner, opts as Options) {
     def o as Options init resolveOptions($opts);
@@ -605,7 +605,7 @@ export func updateSpinner(sp as Spinner, opts as Options) {
  * @param sp {Spinner} running spinner
  * @param msg {string} new status; "" leaves the spinner bare
  * @return {Spinner} the same handle
- * @throws {Error} kind "runtime" when the spinner was already removed
+ * @throws {Error} kind "closed" when the spinner was already removed
  */
 export func statusSpinner(sp as Spinner, msg as string) {
     channel.send($sp.commands, Command{kind: CMD_STATUS, text: $msg, options: $sp.options});
@@ -618,7 +618,7 @@ export func statusSpinner(sp as Spinner, msg as string) {
  * returns.
  * @param sp {Spinner} spinner to stop
  * @return {int} frames drawn; 0 off a terminal
- * @throws {Error} kind "runtime" when the spinner was already removed
+ * @throws {Error} kind "closed" when the spinner was already removed
  */
 export func removeSpinner(sp as Spinner) {
     channel.send($sp.commands, Command{kind: CMD_STOP, text: "", options: $sp.options});
@@ -635,7 +635,7 @@ export func removeSpinner(sp as Spinner) {
  * @param mark {string} leading symbol, such as a check mark; "" for none
  * @param msg {string} line to leave behind
  * @return {int} frames drawn; 0 off a terminal
- * @throws {Error} kind "runtime" when the spinner was already removed
+ * @throws {Error} kind "closed" when the spinner was already removed
  */
 export func finishSpinner(sp as Spinner, mark as string, msg as string) {
     def drawn as int init removeSpinner($sp);

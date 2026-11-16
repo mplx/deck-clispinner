@@ -42,7 +42,7 @@ Every verb takes the handle because the handle carries the command channel.
 `spawn` deep-copies its scope at launch, so the task never sees later writes to
 the caller's variables; the channel is the only shared state. `removeSpinner`
 blocks until the task has finished and closes the channel, so sending to a
-removed spinner throws a `runtime` error. Always call `removeSpinner` or
+removed spinner throws a `closed` error. Always call `removeSpinner` or
 `finishSpinner`: a running spinner keeps the cursor hidden.
 
 ## Options
