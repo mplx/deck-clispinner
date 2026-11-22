@@ -1,7 +1,7 @@
 #!/usr/bin/env -S jennifer run
 # SPDX-License-Identifier: MIT
 # Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 #
 # Hand-run demo; needs a terminal. It lives outside `src/`, so it is never
 # vendored.
@@ -61,7 +61,7 @@ func multiline() {
     pause(1600);
 
     # Far more text than twelve short rows can hold: it is hard cut.
-    $sp = spinner.statusSpinner($sp, strings.repeat("overflowing text ", 40));
+    $sp = spinner.statusSpinner($sp, strings.replicate("overflowing text ", 40));
     pause(1600);
 
     def drawn as int init spinner.finishSpinner($sp, "ok", "the block is gone");

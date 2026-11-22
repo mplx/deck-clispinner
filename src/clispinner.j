@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 # Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 /**
  * A terminal spinner that animates in its own `spawn`ed task.
@@ -230,7 +230,7 @@ export func fitStatus(status as string, budget as int) {
     if ($budget == 1) {
         return "…";
     }
-    return strings.substring($status, 0, $budget - 1) + "…";
+    return $status[..$budget - 1] + "…";
 }
 
 # markCut ends a line with an ellipsis to show text was dropped, giving up a
@@ -243,7 +243,7 @@ func markCut(line as string, width as int) {
     if (len($line) < $width) {
         return $line + "…";
     }
-    return strings.substring($line, 0, $width - 1) + "…";
+    return $line[..$width - 1] + "…";
 }
 
 /**
@@ -269,7 +269,7 @@ export func wrapHard(text as string, width as int) {
         if ($end > len($text)) {
             $end = len($text);
         }
-        $out[] = strings.substring($text, $i, $end);
+        $out[] = $text[$i..$end];
         $i = $end;
     }
     return $out;

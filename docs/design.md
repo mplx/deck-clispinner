@@ -105,8 +105,9 @@ terminal is checked by hand with `demo.j` (the tour, `multiline` and
 
 ## Dependencies on the interpreter
 
-- The floor is `>=0.26.0`. The deck needs `time.fromMilliseconds`, `spawn`,
-  and `channel.len` for the non-blocking command poll.
+- The floor is `>=0.27.0`, for `strings.replicate` in `demo.j`. The deck
+  needs `time.fromMilliseconds`, `spawn`, and `channel.len` for the
+  non-blocking command poll.
 - `term.size` and `os.isTerminal`. No capability is required; on
   `jennifer-tiny` `term` is a stub, the size falls back, and `os.isTerminal`
   reports false, so the spinner draws nothing.
