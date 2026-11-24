@@ -1,6 +1,6 @@
 # @mplx/clispinner
 
-[![release](https://img.shields.io/github/v/release/mplx/deck-clispinner)](https://github.com/mplx/deck-clispinner/releases/latest)
+[![version](https://img.shields.io/github/v/tag/mplx/deck-clispinner?sort=semver&label=version)](https://registry.jennifer-lang.dev/deck/mplx/clispinner)
 
 A terminal spinner for Jennifer. The animation runs in its own `spawn`ed task,
 so the caller carries on with the slow work while it spins.
