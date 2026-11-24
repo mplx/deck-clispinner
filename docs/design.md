@@ -59,7 +59,7 @@ It deliberately is not:
   animation carries its size in columns and rows, and frames are padded to
   it so the status column does not move.
 - **Animations from cli-spinners.** 90 animations are ported from the
-  `cli-spinners` npm package (MIT), so `dots` or `line` look the way users
+  `cli-spinners` npm™ package (MIT), so `dots` or `line` look the way users
   expect; `src/frames.j` is generated from its `spinners.json`. One is the
   deck's own: `soccerVertical`, the only multi-row animation.
 - **MIT licence**, matching the animation data it carries. The deck is not
