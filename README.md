@@ -7,7 +7,7 @@ so the caller carries on with the slow work while it spins.
 
 ```toml
 [decks]
-"@mplx/clispinner" = "^0.2.0"
+"@mplx/clispinner" = "^0.3.0"
 ```
 
 `jvc install` vendors it to `vendor/mplx/clispinner/`. Import it by its scoped
